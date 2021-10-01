@@ -164,6 +164,17 @@ public:
 		return (retrieved_ = object_->get_next());
 	}
 
+	T* update()
+	{
+		if (pending())
+		{
+			return get_next();
+		}
+
+		// Could be null if the writer hasn't pushed anything yet
+		return current_;
+	}
+
 	T* get() { return retrieved_; }
 	const T* get() const { return retrieved_; }
 	T* operator->() { return get(); }
