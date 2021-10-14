@@ -187,7 +187,7 @@ class Write
 
 public:
 
-	T* copy() { return object_->copy(); }
+	T* copy() const { return object_->copy(); }
 	void commit(T* data) { object_->commit(data); }
 
 	template <class ... Args>
@@ -295,8 +295,23 @@ public:
 		return *retrieved_;
 	}
 
-	Write<T>& write() { return object_.write(); }
-	const Write<T>& write() const { return object_.write(); }
+	T* copy() const
+	{
+		return object_->write().copy();
+	}
+
+	void commit(T* data)
+	{
+		object_->write().commit(data);
+		new_data_.store(true, std::memory_order::memory_order_relaxed);
+	}
+
+	template <class ... Args>
+	void commit_new(Args... args)
+	{
+		object_->commit(new T(args...));
+		new_data_.store(true, std::memory_order::memory_order_relaxed);
+	}
 
 private:
 
@@ -304,7 +319,7 @@ private:
 	{
 		const auto signal_value = signal_->get_value();
 
-		if (signal_value > slot_value_ && object_.pending())
+		if (signal_value > slot_value_ && new_data_.load(std::memory_order::memory_order_relaxed))
 		{
 			retrieved_ = object_.read().get();
 		}
@@ -314,8 +329,9 @@ private:
 
 	Object<T> object_;
 	const SignalType* signal_;
-	std::uint32_t slot_value_{ 0 };
+	std::uint32_t slot_value_ { 0 };
 	Immutable<T> retrieved_;
+	std::atomic_bool new_data_ { false };
 };
 
 template <class T, class SignalType = SyncSignal>
@@ -333,7 +349,7 @@ public:
 	{
 		const auto signal_value = signal_->get_value();
 
-		if (signal_value > slot_value_ && object_.pending())
+		if (signal_value > slot_value_ && new_data_.load(std::memory_order::memory_order_relaxed))
 		{
 			retrieved_[idx] = object_.read().get();
 			recent_[idx] = retrieved_[idx];
@@ -353,8 +369,23 @@ public:
 		return *retrieved_[idx];
 	}
 
-	Write<T>& write() { return object_.write(); }
-	const Write<T>& write() const { return object_.write(); }
+	T* copy() const
+	{
+		return object_->write().copy();
+	}
+
+	void commit(T* data)
+	{
+		object_->write().commit(data);
+		new_data_.store(true, std::memory_order::memory_order_relaxed);
+	}
+
+	template <class ... Args>
+	void commit_new(Args... args)
+	{
+		object_->commit(new T(args...));
+		new_data_.store(true, std::memory_order::memory_order_relaxed);
+	}
 
 private:
 
@@ -362,8 +393,9 @@ private:
 
 	Object<T> object_;
 	const SignalType* signal_;
-	std::uint32_t slot_value_{ 0 };
+	std::uint32_t slot_value_ { 0 };
 	std::array<Immutable<T>, 2> retrieved_;
+	std::atomic_bool new_data_ { false };
 };
 
 template <class T, class SignalType = SyncSignal>
