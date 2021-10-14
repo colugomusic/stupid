@@ -311,7 +311,8 @@ public:
 	template <class ... Args>
 	void commit_new(Args... args)
 	{
-		object_.write().commit(new T(args...));
+		const auto data = new T(args...);
+		object_.write().commit(data);
 		committed_ = data;
 		new_data_.store(true, std::memory_order::memory_order_relaxed);
 	}
