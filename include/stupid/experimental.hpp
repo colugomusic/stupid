@@ -304,6 +304,7 @@ public:
 	void commit(T* data)
 	{
 		object_.write().commit(data);
+		committed_ = data;
 		new_data_.store(true, std::memory_order::memory_order_relaxed);
 	}
 
@@ -311,7 +312,13 @@ public:
 	void commit_new(Args... args)
 	{
 		object_.write().commit(new T(args...));
+		committed_ = data;
 		new_data_.store(true, std::memory_order::memory_order_relaxed);
+	}
+
+	const T& get_committed() const
+	{
+		return *committed_;
 	}
 
 private:
@@ -333,6 +340,7 @@ private:
 	std::uint32_t slot_value_ { 0 };
 	Immutable<T> retrieved_;
 	std::atomic_bool new_data_ { false };
+	const T* committed_ { nullptr; }
 };
 
 template <class T, class SignalType = SyncSignal>
