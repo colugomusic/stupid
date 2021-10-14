@@ -158,17 +158,9 @@ class Read
 
 public:
 
-	void update()
-	{
-		if (object_->pending())
-		{
-			object_->get();
-		}
-	}
-
 	Immutable<T> get() const
 	{
-		return retrieved_;
+		return object_->get();
 	}
 
 	const T& get_data() const
@@ -201,8 +193,8 @@ public:
 	template <class ... Args>
 	void commit_new(Args... args) { object_->commit(new T(args...)); }
 
-	Immutable<T> get() { return Immutable<T> { object_->last_written_record_.load(std::memory_order::memory_order_relaxed) }; }
-	const Immutable<T> get() const { return Immutable<T> { object_->last_written_record_.load(std::memory_order::memory_order_relaxed) }; }
+	Immutable<T> get() { object_->get(); }
+	const Immutable<T> get() const { object_->get(); }
 
 private:
 
@@ -234,20 +226,18 @@ public:
 	Write<T>& write() { return write_; }
 	const Write<T>& write() const { return write_; }
 
-	bool pending() const { return pending_record_.load(); }
+	bool has_data() const { return last_written_record_.load(std::memory_order::memory_order_relaxed); }
 
 private:
 
-	Immutable<T> get()
+	Immutable<T> get() const
 	{
-		assert(pending());
-
-		return Immutable<T> { pending_record_.exchange(nullptr) };
+		return Immutable<T> { last_written_record_.load(std::memory_order::memory_order_relaxed) };
 	}
 
-	T* copy()
+	T* copy() const
 	{
-		Immutable<T> ref{ last_written_record_.load(std::memory_order::memory_order_relaxed) };
+		Immutable<T> ref{ get() };
 
 		if (!ref) return nullptr;
 
@@ -258,9 +248,7 @@ private:
 	{
 		const auto record = book_.make_record(data);
 
-		pending_record_.store(record);
 		last_written_record_.store(record, std::memory_order::memory_order_relaxed);
-		pending_ref_ = Immutable<T>{ record };
 		last_written_ref_ = Immutable<T>{ record };
 
 		book_.collect();
@@ -271,11 +259,9 @@ private:
 
 	Book<T> book_;
 
-	std::atomic<Record<T>*> pending_record_{ nullptr };
 	std::atomic<Record<T>*> last_written_record_{ nullptr };
 
 	// Keep at least one reference until overwritten
-	Immutable<T> pending_ref_;
 	Immutable<T> last_written_ref_;
 };
 
@@ -320,7 +306,6 @@ private:
 
 		if (signal_value > slot_value_ && object_.pending())
 		{
-			object_.read().update();
 			retrieved_ = object_.read().get();
 		}
 
@@ -350,7 +335,7 @@ public:
 
 		if (signal_value > slot_value_ && object_.pending())
 		{
-			retrieved_[idx] = object_.read().update();
+			retrieved_[idx] = object_.read().get();
 			recent_[idx] = retrieved_[idx];
 		}
 
