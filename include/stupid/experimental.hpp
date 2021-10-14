@@ -349,10 +349,14 @@ public:
 	{
 		const auto signal_value = signal_->get_value();
 
-		if (signal_value > slot_value_ && new_data_.load(std::memory_order::memory_order_relaxed))
+		if (signal_value > slot_value_)
 		{
-			retrieved_[idx] = object_.read().get();
-			recent_[idx] = retrieved_[idx];
+			const auto new_data = new_data_.exchange(false, std::memory_order::memory_order_relaxed);
+
+			if (new_data)
+			{
+				retrieved_[idx] = object_.read().get();
+			}
 		}
 
 		slot_value_ = signal_value;
@@ -371,21 +375,23 @@ public:
 
 	T* copy() const
 	{
-		return object_->write().copy();
+		return object_.write().copy();
 	}
 
 	void commit(T* data)
 	{
-		object_->write().commit(data);
+		object_.write().commit(data);
 		new_data_.store(true, std::memory_order::memory_order_relaxed);
 	}
 
 	template <class ... Args>
 	void commit_new(Args... args)
 	{
-		object_->commit(new T(args...));
+		object_.write().commit(new T(args...));
 		new_data_.store(true, std::memory_order::memory_order_relaxed);
 	}
+
+	bool pending() const { return new_data_; }
 
 private:
 
@@ -406,16 +412,16 @@ public:
 	QuickSync(const SignalType& signal)
 		: object_(signal)
 	{
-		object_.write().commit_new();
+		object_.commit_new();
 	}
 
 	void sync_copy(std::function<void(T*)> mutator)
 	{
-		const auto copy = object_.write().copy();
+		const auto copy = object_.copy();
 
 		mutator(copy);
 
-		object_.write().commit(copy);
+		object_.commit(copy);
 	}
 
 	void sync_new(std::function<void(T*)> mutator)
@@ -424,7 +430,7 @@ public:
 
 		mutator(new_data);
 
-		object_.write().commit(new_data);
+		object_.commit(new_data);
 	}
 	
 	const T& get_data()
