@@ -297,19 +297,19 @@ public:
 
 	T* copy() const
 	{
-		return object_->write().copy();
+		return object_.write().copy();
 	}
 
 	void commit(T* data)
 	{
-		object_->write().commit(data);
+		object_.write().commit(data);
 		new_data_.store(true, std::memory_order::memory_order_relaxed);
 	}
 
 	template <class ... Args>
 	void commit_new(Args... args)
 	{
-		object_->commit(new T(args...));
+		object_.write().commit(new T(args...));
 		new_data_.store(true, std::memory_order::memory_order_relaxed);
 	}
 
