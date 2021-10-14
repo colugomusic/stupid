@@ -1,6 +1,7 @@
 #pragma once
 
 #include <atomic>
+#include <cassert>
 #include <map>
 
 namespace stupid {
@@ -29,6 +30,14 @@ public:
 	{
 		if (--ref_count_ == 0) book_->dispose(this);
 	}
+
+	bool is_dangling() const
+	{
+		return ref_count_.load() == 0;
+	}
+
+	T* get_data() { return data_; }
+	const T* get_data() const { return data_; }
 
 private:
 
@@ -66,19 +75,21 @@ public:
 		record_ = rhs.record_;
 
 		if (record_) record_->ref();
+
+		return *this;
 	}
 
 	operator bool() const { return record_; }
 
-	const T* get() const
+	const T* get_data() const
 	{
 		assert(record_);
 
-		return record_->object;
+		return record_->get_data();
 	}
 
-	const T* operator->() const { return get(); }
-	const T& operator*() const { return *(get()); }
+	const T* operator->() const { return get_data(); }
+	const T& operator*() const { return *(get_data()); }
 
 private:
 
@@ -121,9 +132,9 @@ public:
 			const auto record = pos->first;
 			const auto disposed = pos->second.load(std::memory_order::memory_order_relaxed);
 
-			if (disposed && record->ref_count.load() == 0)
+			if (disposed && record->is_dangling())
 			{
-				delete record->object;
+				delete record->get_data();
 				delete record;
 
 				pos = dispose_flags_.erase(pos);
@@ -240,7 +251,7 @@ private:
 
 		if (!ref) return nullptr;
 
-		return new T(*(ref.get()));
+		return new T(*(ref.get_data()));
 	}
 
 	void commit(T* data)
@@ -250,7 +261,7 @@ private:
 		pending_record_.store(record);
 		last_written_record_.store(record, std::memory_order::memory_order_relaxed);
 		pending_ref_ = Immutable<T>{ record };
-		last_written_ = Immutable<T>{ record };
+		last_written_ref_ = Immutable<T>{ record };
 
 		book_.collect();
 	}
@@ -317,7 +328,7 @@ private:
 	}
 
 	Object<T> object_;
-	SignalType* signal_;
+	const SignalType* signal_;
 	std::uint32_t slot_value_{ 0 };
 	Immutable<T> retrieved_;
 };
@@ -365,7 +376,7 @@ private:
 	static int flip(int x) { return 1 - x; }
 
 	Object<T> object_;
-	SignalType* signal_;
+	const SignalType* signal_;
 	std::uint32_t slot_value_{ 0 };
 	std::array<Immutable<T>, 2> retrieved_;
 };
@@ -394,7 +405,7 @@ public:
 	{
 		const auto new_data = new T();
 
-		mutator(new_data.get());
+		mutator(new_data);
 
 		object_.write().commit(new_data);
 	}
@@ -406,7 +417,7 @@ public:
 
 private:
 
-	SignalSyncObject<T> object_;
+	SignalSyncObject<T, SignalType> object_;
 };
 
 } // experimental
