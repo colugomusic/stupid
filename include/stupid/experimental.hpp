@@ -12,27 +12,27 @@ class Record
 {
 public:
 
-    Record(T* data, Book<T>* book)
-        : data_(data)
-        , book_(book)
-    {
-    }
+	Record(T* data, Book<T>* book)
+		: data_(data)
+		, book_(book)
+	{
+	}
 
-    void ref()
-    {
-        ref_count_++;
-    }
+	void ref()
+	{
+		ref_count_++;
+	}
 
-    void unref()
-    {
-        if (--ref_count_ == 0) book_->dispose(this);
-    }
+	void unref()
+	{
+		if (--ref_count_ == 0) book_->dispose(this);
+	}
 
 private:
 
-    T* data_ { nullptr };
-    Book<T>* book_ { nullptr };
-    std::atomic<int> ref_count_ { 0 };
+	T* data_{ nullptr };
+	Book<T>* book_{ nullptr };
+	std::atomic<int> ref_count_{ 0 };
 };
 
 template <class T>
@@ -40,47 +40,47 @@ class Immutable
 {
 public:
 
-    Immutable() = default;
+	Immutable() = default;
 
-    Immutable(Record<T>* record)
-        : record_(record)
-    {
-        if (record_) record_->ref();
-    }
+	Immutable(Record<T>* record)
+		: record_(record)
+	{
+		if (record_) record_->ref();
+	}
 
-    ~Immutable()
-    {
-        if (record_) record_->unref();
-    }
+	~Immutable()
+	{
+		if (record_) record_->unref();
+	}
 
-    Immutable(const Immutable<T>& rhs)
-        : record_(rhs.record_)
-    {
-        if (record_) record_->ref();
-    }
+	Immutable(const Immutable<T>& rhs)
+		: record_(rhs.record_)
+	{
+		if (record_) record_->ref();
+	}
 
-    Immutable<T>& operator=(const Immutable<T>& rhs)
-    {
-        record_ = rhs.record_;
+	Immutable<T>& operator=(const Immutable<T>& rhs)
+	{
+		record_ = rhs.record_;
 
-        if (record_) record_->ref();
-    }
+		if (record_) record_->ref();
+	}
 
-    operator bool() const { return record_; }
+	operator bool() const { return record_; }
 
-    const T* get() const
-    {
-        assert(record_);
+	const T* get() const
+	{
+		assert(record_);
 
-        return record_->object;
-    }
+		return record_->object;
+	}
 
-    const T* operator->() const { return get(); }
-    const T& operator*() const { return *(get()); }
+	const T* operator->() const { return get(); }
+	const T& operator*() const { return *(get()); }
 
 private:
 
-    Record<T>* record_ { nullptr };
+	Record<T>* record_{ nullptr };
 };
 
 template <class T>
@@ -88,29 +88,29 @@ class Book
 {
 public:
 
-    ~Book()
-    {
-        collect();
-    }
+	~Book()
+	{
+		collect();
+	}
 
-    Record<T>* make_record(T* data)
-    {
-        const auto out = new Record<T> { data, this };
+	Record<T>* make_record(T* data)
+	{
+		const auto out = new Record<T>{ data, this };
 
-        dispose_flags_[out] = false;
+		dispose_flags_[out] = false;
 
-        return out;
-    }
+		return out;
+	}
 
-    void dispose(Record<T>* record)
-    {
-        const auto pos = dispose_flags_.find(record);
+	void dispose(Record<T>* record)
+	{
+		const auto pos = dispose_flags_.find(record);
 
 		if (pos != dispose_flags_.end())
 		{
 			pos->second = true;
 		}
-    }
+	}
 
 	void collect()
 	{
@@ -132,7 +132,7 @@ public:
 			}
 		}
 	}
-    
+
 private:
 
 	std::map<Record<T>*, std::atomic_bool> dispose_flags_;
@@ -145,23 +145,23 @@ class Read
 
 public:
 
-    void update()
-    {
-        if (object_->pending())
-        {
-		    object_->get();
-        }
-    }
+	void update()
+	{
+		if (object_->pending())
+		{
+			object_->get();
+		}
+	}
 
-    Immutable<T> get() const
-    {
+	Immutable<T> get() const
+	{
 		return retrieved_;
-    }
+	}
 
-    const T& get_data() const
-    {
-        return *retrieved_;
-    }
+	const T& get_data() const
+	{
+		return *retrieved_;
+	}
 
 private:
 
@@ -182,15 +182,15 @@ class Write
 
 public:
 
-    T* copy() { return object_->copy(); }
-    void commit(T* data) { object_->commit(data); }
+	T* copy() { return object_->copy(); }
+	void commit(T* data) { object_->commit(data); }
 
-    template <class ... Args>
-    void commit_new(Args... args) { object_->commit(new T(args...)); }
+	template <class ... Args>
+	void commit_new(Args... args) { object_->commit(new T(args...)); }
 
 	Immutable<T> get() { return Immutable<T> { object_->last_written_record_.load() }; }
 	const Immutable<T> get() const { return Immutable<T> { object_->last_written_record_.load() }; }
-    
+
 private:
 
 	Write(Object<T>* object)
@@ -204,66 +204,66 @@ private:
 template <class T>
 class Object
 {
-    friend class Read<T>;
-    friend class Write<T>;
+	friend class Read<T>;
+	friend class Write<T>;
 
 public:
 
-    Object()
-        : read_(this)
-        , write_(this)
-    {
-    }
+	Object()
+		: read_(this)
+		, write_(this)
+	{
+	}
 
-    Read<T>& read() { return read_; }
-    const Read<T>& read() const { return read_; }
+	Read<T>& read() { return read_; }
+	const Read<T>& read() const { return read_; }
 
-    Write<T>& write() { return write_; }
-    const Write<T>& write() const { return write_; }
+	Write<T>& write() { return write_; }
+	const Write<T>& write() const { return write_; }
 
-    bool pending() const { return pending_record_.load(); }
+	bool pending() const { return pending_record_.load(); }
 
 private:
 
-    Immutable<T> get()
-    {
-        assert(pending());
+	Immutable<T> get()
+	{
+		assert(pending());
 
-        return Immutable<T> { pending_record_.exchange(nullptr) };
-    }
+		return Immutable<T> { pending_record_.exchange(nullptr) };
+	}
 
-    T* copy()
-    {
-        Immutable<T> ref { last_written_record_.load() };
+	T* copy()
+	{
+		Immutable<T> ref{ last_written_record_.load() };
 
-        if (!ref) return nullptr;
-        
-        return new T(*(ref.get()));
-    }
+		if (!ref) return nullptr;
 
-    void commit(T* data)
-    {
-        const auto record = book_.make_record(data);
+		return new T(*(ref.get()));
+	}
 
-        pending_record_.store(record);
-        last_written_record_.store(record);
-        pending_ref_ = Immutable<T> { record };
-        last_written_ = Immutable<T> { record };
+	void commit(T* data)
+	{
+		const auto record = book_.make_record(data);
 
-        book_.collect();
-    }
+		pending_record_.store(record);
+		last_written_record_.store(record);
+		pending_ref_ = Immutable<T>{ record };
+		last_written_ = Immutable<T>{ record };
 
-    Read<T> read_;
-    Write<T> write_;
+		book_.collect();
+	}
 
-    Book<T> book_;
+	Read<T> read_;
+	Write<T> write_;
 
-    std::atomic<Record<T>*> pending_record_ { nullptr };
-    std::atomic<Record<T>*> last_written_record_ { nullptr };
+	Book<T> book_;
 
-    // Keep at least one reference until overwritten
-    Immutable<T> pending_ref_;
-    Immutable<T> last_written_ref_;
+	std::atomic<Record<T>*> pending_record_{ nullptr };
+	std::atomic<Record<T>*> last_written_record_{ nullptr };
+
+	// Keep at least one reference until overwritten
+	Immutable<T> pending_ref_;
+	Immutable<T> last_written_ref_;
 };
 
 class SyncSignal
@@ -284,40 +284,40 @@ class SignalSyncObject
 
 public:
 
-    SignalSyncObject(const SignalType& signal)
-        : signal_(&signal)
-    {
-    }
-    
-    const T& get_data()
-    {
-        if (!retrieved_) update();
+	SignalSyncObject(const SignalType& signal)
+		: signal_(&signal)
+	{
+	}
 
-        return *retrieved_;
-    }
+	const T& get_data()
+	{
+		if (!retrieved_) update();
 
-    Write<T>& write() { return object_.write(); }
-    const Write<T>& write() const { return object_.write(); }
+		return *retrieved_;
+	}
+
+	Write<T>& write() { return object_.write(); }
+	const Write<T>& write() const { return object_.write(); }
 
 private:
 
-    void update()
-    {
-        const auto signal_value = signal_->get_value();
+	void update()
+	{
+		const auto signal_value = signal_->get_value();
 
-        if (signal_value > slot_value_ && object_.pending())
-        {
-            object_.read().update();
-            retrieved_ = object_.read().get();
-        }
+		if (signal_value > slot_value_ && object_.pending())
+		{
+			object_.read().update();
+			retrieved_ = object_.read().get();
+		}
 
-        slot_value_ = signal_value;
-    }
-    
-    Object<T> object_;
-    SignalType* signal_;
-    std::uint32_t slot_value_ { 0 };
-    Immutable<T> retrieved_;
+		slot_value_ = signal_value;
+	}
+
+	Object<T> object_;
+	SignalType* signal_;
+	std::uint32_t slot_value_{ 0 };
+	Immutable<T> retrieved_;
 };
 
 template <class T, class SignalType = SyncSignal>
@@ -330,42 +330,42 @@ public:
 	{
 	}
 
-    // If there's data pending, store it in [0|1].
+	// If there's data pending, store it in [0|1].
 	void update(int idx)
 	{
-        const auto signal_value = signal_->get_value();
-        
-        if (signal_value > slot_value_ && object_.pending())
+		const auto signal_value = signal_->get_value();
+
+		if (signal_value > slot_value_ && object_.pending())
 		{
-            retrieved_[idx] = object_.read().update();
-            recent_[idx] = retrieved_[idx];
+			retrieved_[idx] = object_.read().update();
+			recent_[idx] = retrieved_[idx];
 		}
 
-        slot_value_ = signal_value;
+		slot_value_ = signal_value;
 	}
 
-    // Get the current data for [0|1].
-    const T& get_data(int idx)
-    {
-        if (retrieved_[idx]) return *retrieved_[idx];
-        if (retrieved_[flip(idx)]) return *retrieved_[flip(idx)];
+	// Get the current data for [0|1].
+	const T& get_data(int idx)
+	{
+		if (retrieved_[idx]) return *retrieved_[idx];
+		if (retrieved_[flip(idx)]) return *retrieved_[flip(idx)];
 
-        update(idx);
+		update(idx);
 
-        return *retrieved_[idx];
-    }
+		return *retrieved_[idx];
+	}
 
-    Write<T>& write() { return object_.write(); }
-    const Write<T>& write() const { return object_.write(); }
+	Write<T>& write() { return object_.write(); }
+	const Write<T>& write() const { return object_.write(); }
 
 private:
 
 	static int flip(int x) { return 1 - x; }
 
-    Object<T> object_;
-    SignalType* signal_;
-    std::uint32_t slot_value_ { 0 };
-    std::array<Immutable<T>, 2> retrieved_;
+	Object<T> object_;
+	SignalType* signal_;
+	std::uint32_t slot_value_{ 0 };
+	std::array<Immutable<T>, 2> retrieved_;
 };
 
 } // experimental
