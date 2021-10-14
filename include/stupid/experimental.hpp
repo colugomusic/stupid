@@ -1,3 +1,5 @@
+#pragma once
+
 #include <atomic>
 #include <map>
 
@@ -108,7 +110,7 @@ public:
 
 		if (pos != dispose_flags_.end())
 		{
-			pos->second = true;
+			pos->second.store(true, std::memory_order::memory_order_relaxed);
 		}
 	}
 
@@ -117,7 +119,7 @@ public:
 		for (auto pos = dispose_flags_.begin(); pos != dispose_flags_.end();)
 		{
 			const auto record = pos->first;
-			const auto disposed = pos->second.load();
+			const auto disposed = pos->second.load(std::memory_order::memory_order_relaxed);
 
 			if (disposed && record->ref_count.load() == 0)
 			{
@@ -188,8 +190,8 @@ public:
 	template <class ... Args>
 	void commit_new(Args... args) { object_->commit(new T(args...)); }
 
-	Immutable<T> get() { return Immutable<T> { object_->last_written_record_.load() }; }
-	const Immutable<T> get() const { return Immutable<T> { object_->last_written_record_.load() }; }
+	Immutable<T> get() { return Immutable<T> { object_->last_written_record_.load(std::memory_order::memory_order_relaxed) }; }
+	const Immutable<T> get() const { return Immutable<T> { object_->last_written_record_.load(std::memory_order::memory_order_relaxed) }; }
 
 private:
 
@@ -234,7 +236,7 @@ private:
 
 	T* copy()
 	{
-		Immutable<T> ref{ last_written_record_.load() };
+		Immutable<T> ref{ last_written_record_.load(std::memory_order::memory_order_relaxed) };
 
 		if (!ref) return nullptr;
 
@@ -246,7 +248,7 @@ private:
 		const auto record = book_.make_record(data);
 
 		pending_record_.store(record);
-		last_written_record_.store(record);
+		last_written_record_.store(record, std::memory_order::memory_order_relaxed);
 		pending_ref_ = Immutable<T>{ record };
 		last_written_ = Immutable<T>{ record };
 
@@ -366,6 +368,45 @@ private:
 	SignalType* signal_;
 	std::uint32_t slot_value_{ 0 };
 	std::array<Immutable<T>, 2> retrieved_;
+};
+
+template <class T, class SignalType = SyncSignal>
+class QuickSync
+{
+public:
+
+	QuickSync(const SignalType& signal)
+		: object_(signal)
+	{
+		object_.write().commit_new();
+	}
+
+	void sync_copy(std::function<void(T*)> mutator)
+	{
+		const auto copy = object_.write().copy();
+
+		mutator(copy);
+
+		object_.write().commit(copy);
+	}
+
+	void sync_new(std::function<void(T*)> mutator)
+	{
+		const auto new_data = new T();
+
+		mutator(new_data.get());
+
+		object_.write().commit(new_data);
+	}
+	
+	const T& get_data()
+	{
+		return object_.get_data();
+	}
+
+private:
+
+	SignalSyncObject<T> object_;
 };
 
 } // experimental
