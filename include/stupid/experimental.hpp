@@ -4,6 +4,8 @@
 #include <cassert>
 #include <functional>
 #include <map>
+#include <mutex>
+#include <thread>
 
 namespace stupid {
 namespace experimental {
@@ -247,6 +249,18 @@ private:
 
 	void commit(T* data)
 	{
+#if _DEBUG
+		std::unique_lock<std::mutex> lock(debug_.commit_mutex, std::try_to_lock);
+
+		if (!lock.owns_lock())
+		{
+			throw std::runtime_error(
+				"stupid::Object::commit() is being called from multiple simultaneous "
+				"writer threads which is not supported. If you see this you have a "
+				"bug! This check won't be performed in a release build. This exception "
+				"won't be thrown in a release build.");
+		}
+#endif
 		const auto record = book_.make_record(data);
 
 		last_written_record_.store(record, std::memory_order::memory_order_relaxed);
@@ -264,6 +278,13 @@ private:
 
 	// Keep at least one reference until overwritten
 	Immutable<T> last_written_ref_;
+
+#ifdef _DEBUG
+	struct
+	{
+		std::mutex commit_mutex;
+	} debug_;
+#endif
 };
 
 class SyncSignal
