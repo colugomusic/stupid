@@ -272,10 +272,9 @@ private:
 		return out;
 	}
 
+	Book<T> book_;
 	Read<T> read_;
 	Write<T> write_;
-
-	Book<T> book_;
 
 	std::atomic<Record<T>*> last_written_record_ { nullptr };
 
