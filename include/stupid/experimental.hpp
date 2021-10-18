@@ -368,7 +368,6 @@ private:
 	std::uint32_t slot_value_ { 0 };
 	Immutable<T> retrieved_;
 	std::atomic_bool new_data_ { false };
-	const T* committed_ { nullptr };
 };
 
 template <class T, class SignalType = SyncSignal>
