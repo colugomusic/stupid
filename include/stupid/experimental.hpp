@@ -161,9 +161,9 @@ class Read
 
 public:
 
-	Immutable<T> get() const
+	Immutable<T> get()
 	{
-		return object_->get();
+		return (retrieved_ = object_->get());
 	}
 
 	const T& get_data() const
@@ -191,10 +191,10 @@ class Write
 public:
 
 	T* copy() const { return object_->copy(); }
-	void commit(T* data) { object_->commit(data); }
+	Immutable<T> commit(T* data) { return object_->commit(data); }
 
 	template <class ... Args>
-	void commit_new(Args... args) { object_->commit(new T(args...)); }
+	Immutable<T> commit_new(Args... args) { return object_->commit(new T(args...)); }
 
 	Immutable<T> get() { object_->get(); }
 	const Immutable<T> get() const { object_->get(); }
@@ -247,7 +247,7 @@ private:
 		return new T(*(ref.get_data()));
 	}
 
-	void commit(T* data)
+	Immutable<T> commit(T* data)
 	{
 #if _DEBUG
 		std::unique_lock<std::mutex> lock(debug_.commit_mutex, std::try_to_lock);
@@ -262,11 +262,14 @@ private:
 		}
 #endif
 		const auto record = book_.make_record(data);
+		const auto out = Immutable<T>{ record };
 
 		last_written_record_.store(record, std::memory_order::memory_order_relaxed);
-		last_written_ref_ = Immutable<T>{ record };
+		last_written_ref_ = out;
 
 		book_.collect();
+
+		return out;
 	}
 
 	Read<T> read_;
@@ -274,7 +277,7 @@ private:
 
 	Book<T> book_;
 
-	std::atomic<Record<T>*> last_written_record_{ nullptr };
+	std::atomic<Record<T>*> last_written_record_ { nullptr };
 
 	// Keep at least one reference until overwritten
 	Immutable<T> last_written_ref_;
@@ -312,7 +315,7 @@ public:
 
 	const T& get_data()
 	{
-		if (!retrieved_) update();
+		update();
 
 		return *retrieved_;
 	}
@@ -322,25 +325,23 @@ public:
 		return object_.write().copy();
 	}
 
-	void commit(T* data)
+	Immutable<T> commit(T* data)
 	{
-		object_.write().commit(data);
-		committed_ = data;
+		const auto out = object_.write().commit(data);
+
 		new_data_.store(true, std::memory_order::memory_order_relaxed);
+
+		return out;
 	}
 
 	template <class ... Args>
-	void commit_new(Args... args)
+	Immutable<T> commit_new(Args... args)
 	{
-		const auto data = new T(args...);
-		object_.write().commit(data);
-		committed_ = data;
-		new_data_.store(true, std::memory_order::memory_order_relaxed);
-	}
+		const auto out = object_.write().commit(new T(args...));
 
-	const T& get_committed() const
-	{
-		return *committed_;
+		new_data_.store(true, std::memory_order::memory_order_relaxed);
+
+		return out;
 	}
 
 private:
@@ -349,9 +350,14 @@ private:
 	{
 		const auto signal_value = signal_->get_value();
 
-		if (signal_value > slot_value_ && new_data_.load(std::memory_order::memory_order_relaxed))
+		if (signal_value > slot_value_)
 		{
-			retrieved_ = object_.read().get();
+			const auto new_data = new_data_.exchange(false, std::memory_order::memory_order_relaxed);
+
+			if (new_data)
+			{
+				retrieved_ = object_.read().get();
+			}
 		}
 
 		slot_value_ = signal_value;
@@ -409,17 +415,23 @@ public:
 		return object_.write().copy();
 	}
 
-	void commit(T* data)
+	Immutable<T> commit(T* data)
 	{
-		object_.write().commit(data);
+		const auto out = object_.write().commit(data);
+
 		new_data_.store(true, std::memory_order::memory_order_relaxed);
+
+		return out;
 	}
 
 	template <class ... Args>
-	void commit_new(Args... args)
+	Immutable<T> commit_new(Args... args)
 	{
-		object_.write().commit(new T(args...));
+		const auto out = object_.write().commit(new T(args...));
+
 		new_data_.store(true, std::memory_order::memory_order_relaxed);
+
+		return out;
 	}
 
 	bool pending() const { return new_data_; }
