@@ -5,7 +5,6 @@
 #include <functional>
 #include <map>
 #include <mutex>
-#include <thread>
 
 #ifndef STUPID_UNREASONABLE_REFCOUNT
 #define STUPID_UNREASONABLE_REFCOUNT 64
