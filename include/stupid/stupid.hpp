@@ -132,6 +132,8 @@ public:
 	~Book()
 	{
 		collect();
+
+		assert(dispose_flags_.empty() && "A stupid::Object is being destructed but there are still dangling references to it. Make sure all stupid::Immutable's for this object have been deleted before stupid::Object is destructed.");
 	}
 
 	Record<T>* make_record(T* data)
