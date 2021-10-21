@@ -112,7 +112,7 @@ void audio_callback(...)
 	// This increments its value by 1.
 
 	// The signal's value is checked whenever
-	// stupid::SyncSignal::get_data() is called.
+	// stupid::SignalSyncObject::get_data() is called.
 	sync.signal();
 
 	...
