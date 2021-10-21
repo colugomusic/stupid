@@ -27,17 +27,24 @@ public:
 	void ref()
 	{
 		ref_count_++;
+
+		assert(ref_count_ < 50);
 	}
 
 	void unref()
 	{
-		if (--ref_count_ == 0) book_->dispose(this);
+		if (--ref_count_ == 0)
+		{
+			book_->dispose(this);
+		}
 	}
 
 	bool is_dangling() const
 	{
 		return ref_count_.load() == 0;
 	}
+
+	int get_ref_count() const { return ref_count_.load(); }
 
 	T* get_data() { return data_; }
 	const T* get_data() const { return data_; }
@@ -67,14 +74,28 @@ public:
 		if (record_) record_->unref();
 	}
 
-	Immutable(const Immutable<T>& rhs)
-		: record_(rhs.record_)
+	Immutable(Immutable<T> && rhs) noexcept
 	{
+		if (record_) record_->unref();
+		
+		record_ = rhs.record_;
+
+		rhs.record_ = nullptr;
+	}
+
+	Immutable(const Immutable<T>& rhs)
+	{
+		if (record_) record_->unref();
+
+		record_ = rhs.record_;
+
 		if (record_) record_->ref();
 	}
 
 	Immutable<T>& operator=(const Immutable<T>& rhs)
 	{
+		if (record_) record_->unref();
+
 		record_ = rhs.record_;
 
 		if (record_) record_->ref();
@@ -83,6 +104,7 @@ public:
 	}
 
 	operator bool() const { return record_; }
+	int get_ref_count() const { return record_ ? record_->get_ref_count() : -1; }
 
 	const T* get_data() const
 	{
@@ -163,12 +185,7 @@ public:
 
 	Immutable<T> get()
 	{
-		return (retrieved_ = object_->get());
-	}
-
-	const T& get_data() const
-	{
-		return *retrieved_;
+		return object_->get();
 	}
 
 private:
@@ -179,8 +196,6 @@ private:
 	}
 
 	Object<T>* object_;
-	Immutable<T> retrieved_;
-
 };
 
 template <class T>
