@@ -216,8 +216,8 @@ public:
 	template <class ... Args>
 	Immutable<T> commit_new(Args... args) { return object_->commit(new T(args...)); }
 
-	Immutable<T> get() { object_->get(); }
-	const Immutable<T> get() const { object_->get(); }
+	Immutable<T> get() { return object_->get(); }
+	const Immutable<T> get() const { return object_->get(); }
 
 private:
 
