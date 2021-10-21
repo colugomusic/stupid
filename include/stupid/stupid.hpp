@@ -188,17 +188,11 @@ class Read
 
 public:
 
-	Immutable<T> get()
-	{
-		return object_->get();
-	}
+	Immutable<T> get() { return object_->get(); }
 
 private:
 
-	Read(Object<T>* object)
-		: object_(object)
-	{
-	}
+	Read(Object<T>* object) : object_(object) {}
 
 	Object<T>* object_;
 };
@@ -221,10 +215,7 @@ public:
 
 private:
 
-	Write(Object<T>* object)
-		: object_(object)
-	{
-	}
+	Write(Object<T>* object) : object_(object) {}
 
 	Object<T>* object_;
 };
@@ -237,11 +228,7 @@ class Object
 
 public:
 
-	Object()
-		: read_(this)
-		, write_(this)
-	{
-	}
+	Object() : read_(this) , write_(this) {}
 
 	Read<T>& read() { return read_; }
 	const Read<T>& read() const { return read_; }
