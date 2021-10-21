@@ -12,7 +12,6 @@
 #endif
 
 namespace stupid {
-namespace experimental {
 
 template <class T> class Book;
 template <class T> class Object;
@@ -508,5 +507,4 @@ private:
 	SignalSyncObject<T, SignalType> object_;
 };
 
-} // experimental
 } // stupid
