@@ -7,10 +7,8 @@
 #include <mutex>
 #include <thread>
 
-#if _DEBUG
-#	ifndef STUPID_UNREASONABLE_REFCOUNT
-#		define STUPID_UNREASONABLE_REFCOUNT 64
-#	endif
+#ifndef STUPID_UNREASONABLE_REFCOUNT
+#define STUPID_UNREASONABLE_REFCOUNT 64
 #endif
 
 namespace stupid {
