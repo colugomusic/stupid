@@ -7,6 +7,10 @@
 #include <mutex>
 #include <thread>
 
+#ifndef STUPID_UNREASONABLE_REFCOUNT
+#define STUPID_UNREASONABLE_REFCOUNT 64
+#endif
+
 namespace stupid {
 namespace experimental {
 
@@ -26,25 +30,25 @@ public:
 
 	void ref()
 	{
-		ref_count_++;
+		const auto value = ref_count_.fetch_add(1, std::memory_order::memory_order_relaxed);
 
-		assert(ref_count_ < 50);
+		assert(value < STUPID_UNREASONABLE_REFCOUNT);
 	}
 
 	void unref()
 	{
-		if (--ref_count_ == 0)
+		if (ref_count_.fetch_sub(1, std::memory_order::memory_order_relaxed) == 1)
 		{
 			book_->dispose(this);
 		}
+
+		assert(value < STUPID_UNREASONABLE_REFCOUNT);
 	}
 
 	bool is_dangling() const
 	{
-		return ref_count_.load() == 0;
+		return ref_count_.load(std::memory_order::memory_order_relaxed) == 0;
 	}
-
-	int get_ref_count() const { return ref_count_.load(); }
 
 	T* get_data() { return data_; }
 	const T* get_data() const { return data_; }
@@ -104,7 +108,6 @@ public:
 	}
 
 	operator bool() const { return record_; }
-	int get_ref_count() const { return record_ ? record_->get_ref_count() : -1; }
 
 	const T* get_data() const
 	{
@@ -395,8 +398,10 @@ public:
 	}
 
 	// If there's data pending, store it in [0|1].
-	void update(int idx)
+	void update(std::int8_t idx)
 	{
+		assert(idx == 0 || idx == 1);
+
 		const auto signal_value = signal_->get_value();
 
 		if (signal_value > slot_value_)
@@ -413,8 +418,10 @@ public:
 	}
 
 	// Get the current data for [0|1].
-	const T& get_data(int idx)
+	const T& get_data(std::int8_t idx)
 	{
+		assert(idx == 0 || idx == 1);
+
 		if (retrieved_[idx]) return *retrieved_[idx];
 		if (retrieved_[flip(idx)]) return *retrieved_[flip(idx)];
 
@@ -451,7 +458,7 @@ public:
 
 private:
 
-	static int flip(int x) { return 1 - x; }
+	static auto flip(std::int8_t x) { return 1 - x; }
 
 	Object<T> object_;
 	const SignalType* signal_;
