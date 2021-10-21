@@ -37,12 +37,14 @@ public:
 
 	void unref()
 	{
-		if (ref_count_.fetch_sub(1, std::memory_order::memory_order_relaxed) == 1)
+		const auto value = ref_count_.fetch_sub(1, std::memory_order::memory_order_relaxed);
+
+		assert(value < STUPID_UNREASONABLE_REFCOUNT);
+
+		if (value == 1)
 		{
 			book_->dispose(this);
 		}
-
-		assert(value < STUPID_UNREASONABLE_REFCOUNT);
 	}
 
 	bool is_dangling() const
