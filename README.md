@@ -77,7 +77,7 @@ The audio callback in this example has the following stipulations:
  - May not lock a mutex
  - Should be able to get a reference to some immutable data by calling some function e.g. `get_data()`
  - Repeated calls to `get_data()` within the same invocation of the audio callback must return the same reference
- - The data returned from `get_data()` must remain valid for the duration of the current invocation of the audio callback
+ - The reference returned from `get_data()` must remain valid for the duration of the current invocation of the audio callback
 
 ```c++
 struct
