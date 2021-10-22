@@ -350,6 +350,8 @@ public:
 		return out;
 	}
 
+	bool pending() const { return new_data_.load(std::memory_order::memory_order_relaxed); }
+
 private:
 
 	void update()
