@@ -448,7 +448,7 @@ public:
 	Read<T>& read() { return object_.read(); }
 	const Read<T>& read() const { return object_.read(); }
 
-	bool pending() const { return new_data_; }
+	bool pending() const { return new_data_.load(std::memory_order::memory_order_relaxed); }
 
 private:
 
