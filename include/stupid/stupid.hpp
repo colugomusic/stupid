@@ -445,6 +445,9 @@ public:
 		return out;
 	}
 
+	Read<T>& read() { return object_.read(); }
+	const Read<T>& read() const { return object_.read(); }
+
 	bool pending() const { return new_data_; }
 
 private:
@@ -495,6 +498,28 @@ public:
 private:
 
 	SignalSyncObject<T, SignalType> object_;
+};
+
+struct AtomicTrigger
+{
+	AtomicTrigger()
+	{
+		flag_.store(false, std::memory_order::memory_order_relaxed);
+	}
+
+	void operator()()
+	{
+		flag_.store(true, std::memory_order::memory_order_relaxed);
+	}
+
+	operator bool()
+	{
+		return flag_.exchange(false, std::memory_order::memory_order_relaxed);
+	}
+
+private:
+
+	std::atomic<bool> flag_;
 };
 
 } // stupid
