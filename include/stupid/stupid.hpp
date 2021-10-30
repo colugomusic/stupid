@@ -6,10 +6,6 @@
 #include <map>
 #include <mutex>
 
-#ifndef STUPID_UNREASONABLE_REFCOUNT
-#define STUPID_UNREASONABLE_REFCOUNT 64
-#endif
-
 namespace stupid {
 
 template <class T> class Book;
@@ -28,16 +24,12 @@ public:
 
 	void ref()
 	{
-		const auto value = ref_count_.fetch_add(1, std::memory_order::memory_order_relaxed);
-
-		assert(value < STUPID_UNREASONABLE_REFCOUNT);
+		ref_count_.fetch_add(1, std::memory_order::memory_order_relaxed);
 	}
 
 	void unref()
 	{
 		const auto value = ref_count_.fetch_sub(1, std::memory_order::memory_order_relaxed);
-
-		assert(value < STUPID_UNREASONABLE_REFCOUNT);
 
 		if (value == 1)
 		{
