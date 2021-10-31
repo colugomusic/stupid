@@ -16,10 +16,10 @@ stupid::Object<Thing> thing;
 `In the writer thread`
 ```c++
 // Initialize the object
-thing.write().commit_new();
+thing.write().commit_new(...);
 
 // That's equivalent to doing this
-thing.write().commit(new Thing{});
+thing.write().commit(new Thing{...});
 
 // Create a copy of the object to modify
 auto copy = thing.write().copy();
@@ -47,7 +47,7 @@ ref->stuff();
 ```
 
 ### Caveats
-* Only one simultaneous writer thread is supported
+* Multiple simultaneous writer threads are not supported
 * All `stupid::Immutable`'s for a `stupid::Object` must be deleted before the `stupid::Object` is destructed
 
 ### Notes
@@ -140,4 +140,54 @@ void audio_callback(...)
 	assert(&data1 == &data2);
 }
 
+```
+## More Stuff
+### stupid::AtomicTrigger
+It's a tiny wrapper around `std::atomic_flag`.
+
+- `stupid::AtomicTrigger::operator()` primes the trigger
+- `stupid::AtomicTrigger::operator bool` returns true if the trigger was primed, and resets it
+
+#### Example usage
+```c++
+struct
+{
+	stupid::AtomicTrigger start_playback;
+	stupid::AtomicTrigger stop_playback;
+} sync;
+```
+`UI thread`
+```c++
+void process_ui_events()
+{
+	if (start_button_pressed)
+	{
+		sync.start_playback(); // Tell the audio thread to start playback ASAP
+	}
+	
+	if (stop_button_pressed)
+	{
+		sync.stop_playback(); // Tell the audio thread to stop playback ASAP
+	}
+}
+```
+`Audio thread`
+```c++
+void audio_process()
+{
+	switch (current_state)
+	{
+		case Playing:
+		{
+			if (sync.stop_playback) stop();
+			break;
+		}
+		
+		case Stopped:
+		{
+			if (sync.start_playback) start();
+			break;
+		}
+	}
+}
 ```
