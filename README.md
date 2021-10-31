@@ -1,5 +1,5 @@
 # stupid
-Header-only lock-free synchronization utilities (one writer, many readers)
+Header-only lock-free synchronization utilities (one writer, many readers). No queues
 
 ## Base functionality
 
