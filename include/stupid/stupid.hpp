@@ -342,6 +342,9 @@ public:
 		return out;
 	}
 
+	Read<T>& read() { return object_.read(); }
+	const Read<T>& read() const { return object_.read(); }
+
 	bool pending() const { return new_data_.load(std::memory_order::memory_order_relaxed); }
 
 private:
@@ -496,22 +499,22 @@ struct AtomicTrigger
 {
 	AtomicTrigger()
 	{
-		flag_.store(false, std::memory_order::memory_order_relaxed);
+		flag_.test_and_set(std::memory_order::memory_order_relaxed);
 	}
 
 	void operator()()
 	{
-		flag_.store(true, std::memory_order::memory_order_relaxed);
+		flag_.clear(std::memory_order::memory_order_relaxed);
 	}
 
 	operator bool()
 	{
-		return flag_.exchange(false, std::memory_order::memory_order_relaxed);
+		return !(flag_.test_and_set(std::memory_order::memory_order_relaxed));
 	}
 
 private:
 
-	std::atomic<bool> flag_;
+	std::atomic_flag flag_;
 };
 
 } // stupid
