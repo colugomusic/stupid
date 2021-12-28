@@ -108,8 +108,18 @@ public:
 		return record_->get_data();
 	}
 
+	T* get_data()
+	{
+		assert(record_);
+
+		return record_->get_data();
+	}
+
 	const T* operator->() const { return get_data(); }
 	const T& operator*() const { return *(get_data()); }
+
+	T* operator->() { return get_data(); }
+	T& operator*() { return *(get_data()); }
 
 private:
 
@@ -404,7 +414,7 @@ public:
 	}
 
 	// Get the current data for [0|1].
-	const T& get_data(std::int8_t idx)
+	T& get_data(std::int8_t idx)
 	{
 		assert(idx == 0 || idx == 1);
 
