@@ -414,7 +414,7 @@ public:
 	}
 
 	// Get the current data for [0|1].
-	T& get_data(std::int8_t idx)
+	const T& get_data(std::int8_t idx)
 	{
 		assert(idx == 0 || idx == 1);
 
