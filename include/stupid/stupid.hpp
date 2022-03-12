@@ -423,6 +423,9 @@ public:
 
 		update(idx);
 
+		// Could trip if nothing has been committed yet.
+		assert(retrieved_[idx]);
+
 		return *retrieved_[idx];
 	}
 
