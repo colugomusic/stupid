@@ -510,23 +510,25 @@ private:
 
 struct AtomicTrigger
 {
-	AtomicTrigger()
+	AtomicTrigger(std::memory_order memory_order = std::memory_order::memory_order_relaxed)
+		: memory_order_ { memory_order }
 	{
-		flag_.test_and_set(std::memory_order::memory_order_relaxed);
+		flag_.test_and_set(memory_order);
 	}
 
 	void operator()()
 	{
-		flag_.clear(std::memory_order::memory_order_relaxed);
+		flag_.clear(memory_order_);
 	}
 
 	operator bool()
 	{
-		return !(flag_.test_and_set(std::memory_order::memory_order_relaxed));
+		return !(flag_.test_and_set(memory_order_));
 	}
 
 private:
 
+	std::memory_order memory_order_;
 	std::atomic_flag flag_;
 };
 
