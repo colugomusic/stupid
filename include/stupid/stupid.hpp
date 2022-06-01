@@ -24,12 +24,12 @@ public:
 
 	void ref()
 	{
-		ref_count_.fetch_add(1, std::memory_order::memory_order_relaxed);
+		ref_count_.fetch_add(1, std::memory_order_relaxed);
 	}
 
 	void unref()
 	{
-		const auto value = ref_count_.fetch_sub(1, std::memory_order::memory_order_relaxed);
+		const auto value = ref_count_.fetch_sub(1, std::memory_order_relaxed);
 
 		if (value == 1)
 		{
@@ -39,7 +39,7 @@ public:
 
 	bool is_dangling() const
 	{
-		return ref_count_.load(std::memory_order::memory_order_relaxed) == 0;
+		return ref_count_.load(std::memory_order_relaxed) == 0;
 	}
 
 	T* get_data() { return data_; }
@@ -153,7 +153,7 @@ public:
 
 		if (pos != dispose_flags_.end())
 		{
-			pos->second.store(true, std::memory_order::memory_order_relaxed);
+			pos->second.store(true, std::memory_order_relaxed);
 		}
 	}
 
@@ -162,7 +162,7 @@ public:
 		for (auto pos = dispose_flags_.begin(); pos != dispose_flags_.end();)
 		{
 			const auto record = pos->first;
-			const auto disposed = pos->second.load(std::memory_order::memory_order_relaxed);
+			const auto disposed = pos->second.load(std::memory_order_relaxed);
 
 			if (disposed && record->is_dangling())
 			{
@@ -238,13 +238,13 @@ public:
 	Write<T>& write() { return write_; }
 	const Write<T>& write() const { return write_; }
 
-	bool has_data() const { return last_written_record_.load(std::memory_order::memory_order_relaxed); }
+	bool has_data() const { return last_written_record_.load(std::memory_order_relaxed); }
 
 private:
 
 	Immutable<T> get() const
 	{
-		return Immutable<T> { last_written_record_.load(std::memory_order::memory_order_relaxed) };
+		return Immutable<T> { last_written_record_.load(std::memory_order_relaxed) };
 	}
 
 	T* copy() const
@@ -273,7 +273,7 @@ private:
 		const auto record = book_.make_record(data);
 		const auto out = Immutable<T>{ record };
 
-		last_written_record_.store(record, std::memory_order::memory_order_relaxed);
+		last_written_record_.store(record, std::memory_order_relaxed);
 		last_written_ref_ = out;
 
 		book_.collect();
@@ -337,7 +337,7 @@ public:
 	{
 		const auto out = object_.write().commit(data);
 
-		new_data_.store(true, std::memory_order::memory_order_relaxed);
+		new_data_.store(true, std::memory_order_relaxed);
 
 		return out;
 	}
@@ -347,7 +347,7 @@ public:
 	{
 		const auto out = object_.write().commit(new T(args...));
 
-		new_data_.store(true, std::memory_order::memory_order_relaxed);
+		new_data_.store(true, std::memory_order_relaxed);
 
 		return out;
 	}
@@ -355,7 +355,7 @@ public:
 	Read<T>& read() { return object_.read(); }
 	const Read<T>& read() const { return object_.read(); }
 
-	bool pending() const { return new_data_.load(std::memory_order::memory_order_relaxed); }
+	bool pending() const { return new_data_.load(std::memory_order_relaxed); }
 
 private:
 
@@ -365,7 +365,7 @@ private:
 
 		if (signal_value > slot_value_)
 		{
-			const auto new_data = new_data_.exchange(false, std::memory_order::memory_order_relaxed);
+			const auto new_data = new_data_.exchange(false, std::memory_order_relaxed);
 
 			if (new_data)
 			{
@@ -402,7 +402,7 @@ public:
 
 		if (signal_value > slot_value_)
 		{
-			const auto new_data = new_data_.exchange(false, std::memory_order::memory_order_relaxed);
+			const auto new_data = new_data_.exchange(false, std::memory_order_relaxed);
 
 			if (new_data)
 			{
@@ -438,7 +438,7 @@ public:
 	{
 		const auto out = object_.write().commit(data);
 
-		new_data_.store(true, std::memory_order::memory_order_relaxed);
+		new_data_.store(true, std::memory_order_relaxed);
 
 		return out;
 	}
@@ -448,7 +448,7 @@ public:
 	{
 		const auto out = object_.write().commit(new T(args...));
 
-		new_data_.store(true, std::memory_order::memory_order_relaxed);
+		new_data_.store(true, std::memory_order_relaxed);
 
 		return out;
 	}
@@ -456,7 +456,7 @@ public:
 	Read<T>& read() { return object_.read(); }
 	const Read<T>& read() const { return object_.read(); }
 
-	bool pending() const { return new_data_.load(std::memory_order::memory_order_relaxed); }
+	bool pending() const { return new_data_.load(std::memory_order_relaxed); }
 
 private:
 
@@ -510,7 +510,7 @@ private:
 
 struct AtomicTrigger
 {
-	AtomicTrigger(std::memory_order memory_order = std::memory_order::memory_order_relaxed)
+	AtomicTrigger(std::memory_order memory_order = std::memory_order_relaxed)
 		: memory_order_ { memory_order }
 	{
 		flag_.test_and_set(memory_order);
