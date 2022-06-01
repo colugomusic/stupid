@@ -580,9 +580,11 @@ public:
 	template <int player>
 	auto catch_ball() -> bool
 	{
-		static_assert(player == 0 || player == 1)
+		static_assert(player == 0 || player == 1);
 
-		return thrown_to_.compare_exchange_weak(player, NO_PLAYER, std::memory_order_acquire, std::memory_order_relaxed);
+		int tmp{ player };
+
+		return thrown_to_.compare_exchange_weak(tmp, NO_PLAYER, std::memory_order_acquire, std::memory_order_relaxed);
 	}
 
 private:
