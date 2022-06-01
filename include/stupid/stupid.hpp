@@ -565,7 +565,7 @@ public:
 	template <int player>
 	auto throw_ball() -> void
 	{
-		static_assert(player == 0 || player == 1)
+		static_assert(player == 0 || player == 1);
 
 		thrown_to_.store(1 - player, std::memory_order_release);
 	}
