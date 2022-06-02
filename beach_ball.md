@@ -1,5 +1,5 @@
 # Beach Ball Synchronization
-There is a class [in the stupid header](include/stupid/stupid.hpp) named `stupid::BeachBall` which can be used to coordinate exclusive access to some memory between exactly two threads without any locks (with some hardware synchronization through aquire/release `std::atomic memory` ordering.)
+There is a class [in the stupid header](include/stupid/stupid.hpp) named `stupid::BeachBall` which can be used to coordinate exclusive access to some memory between exactly two threads without any locks (with some hardware synchronization through aquire/release `std::atomic` memory ordering.)
 
 This mechanism is intended for situations where both threads are running their own loop and will periodically work on some shared memory.
 
