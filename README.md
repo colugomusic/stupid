@@ -194,43 +194,4 @@ void audio_process()
 ### stupid::BeachBall and stupid::BeachBallPlayer
 Can be used to synchronize access to some memory between exactly two threads.
 
-Only the player currently holding the ball is allowed to access the memory.
-
-TODO: Write a better description here :-)
-#### Example usage
-```c++
-struct
-{
-	static constexpr int THREAD_A{ 0 };
-	static constexpr int THREAD_B{ 1 };
-	static constexpr int WHO_STARTS_WITH_THE_BALL{ THREAD_A };
-	
-	stupid::BeachBall ball{ WHO_STARTS_WITH_THE_BALL };
-	stupid::BeachBallPlayer<THREAD_A> thread_a{ &ball };
-	stupid::BeachBallPlayer<THREAD_B> thread_b{ &ball };
-} beach_;
-
-BufferType buffer;
-```
-`Thread A`
-```c++
-void process()
-{
-	if (!beach_.thread_a.ensure()) return;
-	
-	modify_buffer(&buffer);
-	
-	beach_.thread_a.throw_ball();
-}
-```
-`Thread B`
-```c++
-void process()
-{
-	if (!beach_.thread_b.ensure()) return;
-	
-	modify_buffer(&buffer);
-	
-	beach_.thread_b.throw_ball();
-}
-```
+Some documentation here: [beach_ball.md](beach_ball.md)
