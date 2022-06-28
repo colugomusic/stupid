@@ -29,9 +29,9 @@ public:
 
 	void unref()
 	{
-		ref_count_--;
+		const auto value{ ref_count_.fetch_sub(1) };
 
-		if (ref_count_ == 1)
+		if (value == 1)
 		{
 			book_->dispose(this);
 		}
