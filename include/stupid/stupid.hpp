@@ -162,7 +162,7 @@ public:
 		for (auto pos = dispose_flags_.begin(); pos != dispose_flags_.end();)
 		{
 			const auto record{ pos->first };
-			const auto disposed { pos->second };
+			const auto disposed { pos->second.load() };
 
 			if (disposed && record->is_dangling())
 			{
