@@ -1,7 +1,7 @@
 # Beach Ball Synchronization
 There is a class [in the stupid header](include/stupid/stupid.hpp) named `stupid::BeachBall` which can be used to coordinate exclusive access to some memory between exactly two threads without any locks (with some hardware synchronization through aquire/release `std::atomic` memory ordering.)
 
-This mechanism is intended for situations where both threads are running their own loop and will periodically work on some shared memory.
+This mechanism is intended for situations where both threads are running their own loop and will periodically work on some shared memory. Both threads want to take turns working on the memory, i.e. when a thread finishes working on the memory, it won't want to work on it again until the other thread has finished with it. If a thread wants to work on the memory it doesn't need to work on it right now this very instant - it is ok for it to just check if the other thread is still working on it and then go off and do something else and then check again later (instead of spinlocking).
 
 I don't know if there is already a name for this technique because I don't know anything.
 
