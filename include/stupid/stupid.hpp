@@ -22,12 +22,12 @@ public:
 	{
 	}
 
-	void ref()
+	auto ref() -> void
 	{
 		ref_count_++;
 	}
 
-	void unref()
+	auto unref() -> void
 	{
 		const auto value{ ref_count_.fetch_sub(1) };
 
@@ -37,18 +37,18 @@ public:
 		}
 	}
 
-	bool is_dangling() const
+	auto is_dangling() const -> bool
 	{
 		return ref_count_ == 0;
 	}
 
-	const T* get_data() const { return data_; }
+	auto get_data() const -> const T* { return data_; }
 
 private:
 
-	T* data_{ nullptr };
-	Book<T>* book_{ nullptr };
-	std::atomic<int> ref_count_{ 0 };
+	T* data_{nullptr};
+	Book<T>* book_{nullptr};
+	std::atomic<int> ref_count_{0};
 };
 
 template <class T>
@@ -87,7 +87,7 @@ public:
 		if (record_) record_->ref();
 	}
 
-	Immutable<T>& operator=(const Immutable<T>& rhs)
+	auto operator=(const Immutable<T>& rhs) -> Immutable<T>&
 	{
 		if (record_) record_->unref();
 
@@ -100,19 +100,19 @@ public:
 
 	operator bool() const { return record_; }
 
-	const T* get_data() const
+	auto get_data() const -> const T*
 	{
 		assert(record_);
 
 		return record_->get_data();
 	}
 
-	const T* operator->() const { return get_data(); }
-	const T& operator*() const { return *(get_data()); }
+	auto operator->() const { return get_data(); }
+	auto& operator*() const { return *(get_data()); }
 
 private:
 
-	Record<T>* record_{ nullptr };
+	Record<T>* record_{nullptr};
 };
 
 template <class T>
@@ -127,18 +127,18 @@ public:
 		assert(dispose_flags_.empty() && "A stupid::Object is being destructed but there are still dangling references to it. Make sure all stupid::Immutable's for this object have been deleted before stupid::Object is destructed.");
 	}
 
-	Record<T>* make_record(T* data)
+	auto make_record(T* data) -> Record<T>*
 	{
-		const auto out = new Record<T>{ data, this };
+		const auto out{new Record<T>{data, this}};
 
 		dispose_flags_[out] = false;
 
 		return out;
 	}
 
-	void dispose(Record<T>* record)
+	auto dispose(Record<T>* record) -> void
 	{
-		const auto pos = dispose_flags_.find(record);
+		const auto pos{dispose_flags_.find(record)};
 
 		if (pos != dispose_flags_.end())
 		{
@@ -146,12 +146,12 @@ public:
 		}
 	}
 
-	void collect()
+	auto collect() -> void
 	{
 		for (auto pos = dispose_flags_.begin(); pos != dispose_flags_.end();)
 		{
-			const auto record{ pos->first };
-			const auto disposed { pos->second.load() };
+			const auto record{pos->first};
+			const auto disposed {pos->second.load()};
 
 			if (disposed && record->is_dangling())
 			{
@@ -179,7 +179,7 @@ class Read
 
 public:
 
-	Immutable<T> get() { return object_->get(); }
+	auto get() const { return object_->get(); }
 
 private:
 
@@ -195,14 +195,14 @@ class Write
 
 public:
 
-	T* copy() const { return object_->copy(); }
-	Immutable<T> commit(T* data) { return object_->commit(data); }
+	auto copy() const { return object_->copy(); }
+	auto commit(T* data) { return object_->commit(data); }
 
 	template <class ... Args>
-	Immutable<T> commit_new(Args... args) { return object_->commit(new T(args...)); }
+	auto commit_new(Args... args) { return object_->commit(new T(args...)); }
 
 	Immutable<T> get() { return object_->get(); }
-	const Immutable<T> get() const { return object_->get(); }
+	auto get() const { return object_->get(); }
 
 private:
 
@@ -221,22 +221,21 @@ public:
 
 	Object() : read_(this) , write_(this) {}
 
-	Read<T>& read() { return read_; }
-	const Read<T>& read() const { return read_; }
+	auto& read() const { return read_; }
 
-	Write<T>& write() { return write_; }
-	const Write<T>& write() const { return write_; }
+	auto& write() { return write_; }
+	auto& write() const { return write_; }
 
-	bool has_data() const { return last_written_record_; }
+	auto has_data() const -> bool { return last_written_record_; }
 
 private:
 
-	Immutable<T> get() const
+	auto get() const
 	{
-		return Immutable<T> { last_written_record_ };
+		return Immutable<T>{last_written_record_};
 	}
 
-	T* copy() const
+	auto copy() const -> T*
 	{
 		Immutable<T> ref{ get() };
 
@@ -245,7 +244,7 @@ private:
 		return new T(*(ref.get_data()));
 	}
 
-	Immutable<T> commit(T* data)
+	auto commit(T* data) -> Immutable<T>
 	{
 #if _DEBUG
 		std::unique_lock<std::mutex> lock(debug_.commit_mutex, std::try_to_lock);
@@ -259,8 +258,8 @@ private:
 				"won't be thrown in a release build.");
 		}
 #endif
-		const auto record = book_.make_record(data);
-		const auto out = Immutable<T>{ record };
+		const auto record{book_.make_record(data)};
+		const auto out{Immutable<T>{record}};
 
 		last_written_record_ = record;
 		last_written_ref_ = out;
@@ -274,7 +273,7 @@ private:
 	Read<T> read_;
 	Write<T> write_;
 
-	std::atomic<Record<T>*> last_written_record_ { nullptr };
+	std::atomic<Record<T>*> last_written_record_{nullptr};
 
 	// Keep at least one reference until overwritten
 	Immutable<T> last_written_ref_;
@@ -291,12 +290,12 @@ class SyncSignal
 {
 public:
 
-	std::uint32_t get_value() const { return value_; }
-	void operator()() { value_++; }
+	auto get_value() const { return value_; }
+	auto operator()() -> void { value_++; }
 
 private:
 
-	std::uint32_t value_ = 0;
+	uint32_t value_{0};
 };
 
 template <class T, class SignalType = SyncSignal>
@@ -310,21 +309,21 @@ public:
 	{
 	}
 
-	const T& get_data()
+	auto& get_data()
 	{
 		update();
 
 		return *retrieved_;
 	}
 
-	T* copy() const
+	auto copy() const
 	{
 		return object_.write().copy();
 	}
 
-	Immutable<T> commit(T* data)
+	auto commit(T* data)
 	{
-		const auto out = object_.write().commit(data);
+		const auto out{object_.write().commit(data)};
 
 		new_data_ = true;
 
@@ -332,23 +331,21 @@ public:
 	}
 
 	template <class ... Args>
-	Immutable<T> commit_new(Args... args)
+	auto commit_new(Args... args)
 	{
-		const auto out = object_.write().commit(new T(args...));
+		const auto out{object_.write().commit(new T(args...))};
 
 		new_data_ = true;
 
 		return out;
 	}
 
-	Read<T>& read() { return object_.read(); }
-	const Read<T>& read() const { return object_.read(); }
-
-	bool pending() const { return new_data_; }
+	auto& read() const { return object_.read(); }
+	auto pending() const -> bool { return new_data_; }
 
 private:
 
-	void update()
+	auto update() -> void
 	{
 		const auto signal_value = signal_->get_value();
 
@@ -367,9 +364,9 @@ private:
 
 	Object<T> object_;
 	const SignalType* signal_;
-	std::uint32_t slot_value_ { 0 };
+	std::uint32_t slot_value_{0};
 	Immutable<T> retrieved_;
-	std::atomic_bool new_data_ { false };
+	std::atomic_bool new_data_{false};
 };
 
 template <class T, class SignalType = SyncSignal>
@@ -383,15 +380,15 @@ public:
 	}
 
 	// If there's data pending, store it in [0|1].
-	void update(std::int8_t idx)
+	auto update(int8_t idx) -> void
 	{
 		assert(idx == 0 || idx == 1);
 
-		const auto signal_value = signal_->get_value();
+		const auto signal_value{signal_->get_value()};
 
 		if (signal_value > slot_value_)
 		{
-			const auto new_data = new_data_.exchange(false);
+			const auto new_data{new_data_.exchange(false)};
 
 			if (new_data)
 			{
@@ -403,7 +400,7 @@ public:
 	}
 
 	// Get the current data for [0|1].
-	const T& get_data(std::int8_t idx)
+	auto get_data(int8_t idx) -> const T&
 	{
 		assert(idx == 0 || idx == 1);
 
@@ -418,14 +415,14 @@ public:
 		return *retrieved_[idx];
 	}
 
-	T* copy() const
+	auto copy() const -> T*
 	{
 		return object_.write().copy();
 	}
 
-	Immutable<T> commit(T* data)
+	auto commit(T* data)
 	{
-		const auto out = object_.write().commit(data);
+		const auto out{object_.write().commit(data)};
 
 		new_data_ = true;
 
@@ -433,29 +430,27 @@ public:
 	}
 
 	template <class ... Args>
-	Immutable<T> commit_new(Args... args)
+	auto commit_new(Args... args)
 	{
-		const auto out = object_.write().commit(new T(args...));
+		const auto out{object_.write().commit(new T(args...))};
 
 		new_data_ = true;
 
 		return out;
 	}
 
-	Read<T>& read() { return object_.read(); }
-	const Read<T>& read() const { return object_.read(); }
-
-	bool pending() const { return new_data_; }
+	auto& read() const { return object_.read(); }
+	auto pending() const -> bool { return new_data_; }
 
 private:
 
-	static auto flip(std::int8_t x) { return 1 - x; }
+	static auto flip(int8_t x) { return 1 - x; }
 
 	Object<T> object_;
 	const SignalType* signal_;
-	std::uint32_t slot_value_ { 0 };
+	std::uint32_t slot_value_{0};
 	std::array<Immutable<T>, 2> retrieved_;
-	std::atomic_bool new_data_ { false };
+	std::atomic_bool new_data_{false};
 };
 
 template <class T, class SignalType = SyncSignal>
@@ -469,25 +464,25 @@ public:
 		object_.commit_new();
 	}
 
-	void sync_copy(std::function<void(T*)> mutator)
+	auto sync_copy(std::function<void(T*)> mutator) -> void
 	{
-		const auto copy = object_.copy();
+		const auto copy{object_.copy()};
 
 		mutator(copy);
 
 		object_.commit(copy);
 	}
 
-	void sync_new(std::function<void(T*)> mutator)
+	auto sync_new(std::function<void(T*)> mutator) -> void
 	{
-		const auto new_data = new T();
+		const auto new_data{new T()};
 
 		mutator(new_data);
 
 		object_.commit(new_data);
 	}
 	
-	const T& get_data()
+	auto get_data() -> const T&
 	{
 		return object_.get_data();
 	}
@@ -505,7 +500,7 @@ struct AtomicTrigger
 		flag_.test_and_set(memory_order);
 	}
 
-	void operator()()
+	auto operator()() -> void
 	{
 		flag_.clear(memory_order_);
 	}
