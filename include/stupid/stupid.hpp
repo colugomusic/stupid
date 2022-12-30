@@ -42,7 +42,6 @@ public:
 		return ref_count_ == 0;
 	}
 
-	//T* get_data() { return data_; }
 	const T* get_data() const { return data_; }
 
 private:
