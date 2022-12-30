@@ -3,8 +3,8 @@
 #include <atomic>
 #include <cassert>
 #include <functional>
-#include <map>
 #include <mutex>
+#include <unordered_map>
 
 namespace stupid {
 
@@ -42,7 +42,7 @@ public:
 		return ref_count_ == 0;
 	}
 
-	T* get_data() { return data_; }
+	//T* get_data() { return data_; }
 	const T* get_data() const { return data_; }
 
 private:
@@ -108,18 +108,8 @@ public:
 		return record_->get_data();
 	}
 
-	T* get_data()
-	{
-		assert(record_);
-
-		return record_->get_data();
-	}
-
 	const T* operator->() const { return get_data(); }
 	const T& operator*() const { return *(get_data()); }
-
-	T* operator->() { return get_data(); }
-	T& operator*() { return *(get_data()); }
 
 private:
 
@@ -180,7 +170,7 @@ public:
 
 private:
 
-	std::map<Record<T>*, std::atomic_bool> dispose_flags_;
+	std::unordered_map<Record<T>*, std::atomic_bool> dispose_flags_;
 };
 
 template <class T>
