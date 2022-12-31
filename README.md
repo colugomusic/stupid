@@ -41,7 +41,6 @@ ref->stuff();
 
 ### Caveats
 * Multiple simultaneous writer threads are not supported
-* All `stupid::ref`'s for a `stupid::object` must be deleted before the `stupid::object` is destructed
 
 ### Notes
 * Only these methods allocate memory:
@@ -51,6 +50,8 @@ ref->stuff();
 * Only these methods deallocate memory (in the form of garbage collection of old versions of the object):
     - `stupid::object::~object()`
     - `stupid::write::update()`
+    
+# The `stupid::ref` destructor will also deallocate, but only if the associated `stupid::object` was already destructed.
 
 ## Additional classes
 
