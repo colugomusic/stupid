@@ -17,9 +17,9 @@ stupid::object<Thing> thing{constructor, args, ...};
 ```c++
 thing.write.update([](Thing thing)
 {
-	thing->modify();
-	thing->the();
-	thing->object();
+	thing.modify();
+	thing.the();
+	thing.object();
 	
 	return thing;
 });
@@ -85,9 +85,9 @@ void update_audio_data()
 {
 	sync.data.write.update([](AudioData data)
 	{
-		data->modify();
-		data->the();
-		data->data();
+		data.modify();
+		data.the();
+		data.data();
 		
 		return data;
 	});
