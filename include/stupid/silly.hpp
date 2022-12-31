@@ -13,7 +13,7 @@ namespace detail {
 template <typename T>
 struct control_block
 {
-	T value;
+	const T value;
 	std::atomic<uint32_t> ref_count{0};
 };
 
@@ -29,16 +29,16 @@ public:
 	using ref_t = ref<T>;
 
 	template <typename... Args>
-	object(Args... args)
-		: write{this, args...}
-	{
-	}
+	object(Args... args) : write{this, args...} {}
 
 	struct read_t
 	{
 		read_t(me_t* self) : self_{self} {}
 
-		auto acquire() const -> ref_t;
+		auto acquire() const -> ref_t
+		{
+			return ref_t{self_->critical_.control_block.load()};
+		}
 
 	private:
 
@@ -58,11 +58,29 @@ public:
 		}
 
 		template <typename UpdateFn>
-		auto update(UpdateFn&& fn) -> void;
+		auto update(UpdateFn&& fn) -> void
+		{
+			const auto old_instance{instance_};
+			const auto cb{new cb_t{fn(*old_instance), 0}};
+
+			self_->critical_.control_block = cb;
+			instance_ = ref_t{cb};
+
+			garbage_.push_back(old_instance);
+			garbage_collect();
+		}
 
 	private:
 
-		auto garbage_collect() -> void;
+		auto garbage_collect() -> void
+		{
+			static const auto can_be_deleted = [](const ref_t& instance)
+			{
+				return instance.is_unique() == 1;
+			};
+
+			garbage_.erase(std::remove_if(std::begin(garbage_), std::end(garbage_), can_be_deleted), std::end(garbage_));
+		}
 
 		me_t* self_;
 		ref_t instance_;
@@ -86,14 +104,73 @@ public:
 	using me_t = object<T>;
 
 	ref() = default;
-	ref(cb_t* cb);
-	ref(ref<T>&& rhs) noexcept;
-	ref(const ref<T>& rhs);
 
-	auto operator=(ref<T>&& rhs) noexcept -> ref<T>&;
-	auto operator=(const ref<T>& rhs) -> ref<T>&;
+	ref(cb_t* cb)
+		: cb_{cb}
+	{
+		assert (cb);
 
-	~ref();
+		ref_add();
+	}
+
+	ref(ref<T>&& rhs) noexcept
+	{
+		if (cb_)
+		{
+			ref_sub();
+		}
+
+		cb_ = rhs.cb_;
+		rhs.cb_ = {};
+	}
+
+	ref(const ref<T>& rhs)
+		: cb_{rhs.cb_}
+	{
+		if (!cb_) return;
+
+		assert (cb_->ref_count > 0);
+
+		ref_add();
+	}
+
+	~ref()
+	{
+		if (!cb_) return;
+
+		ref_sub();
+	}
+
+	auto operator=(ref<T>&& rhs) noexcept -> ref<T>&
+	{
+		if (cb_)
+		{
+			ref_sub();
+		}
+
+		cb_ = rhs.cb_;
+		rhs.cb_ = {};
+
+		return *this;
+	}
+
+	auto operator=(const ref<T>& rhs) -> ref<T>&
+	{
+		if (cb_)
+		{
+			ref_sub();
+		}
+
+		cb_ = rhs.cb_;
+
+		if (!cb_) return *this;
+
+		assert (cb_->ref_count > 0);
+
+		ref_add();
+
+		return *this;
+	}
 
 	auto get_value() const { return cb_->value; }
 	auto is_unique() const { return cb_->ref_count == 1; }
@@ -123,116 +200,8 @@ private:
 };
 
 /////////////////////////////////////////////////////////////////////////
-/// object //////////////////////////////////////////////////////////////
+/// sync signal /////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////////
-
-template <typename T>
-auto object<T>::read_t::acquire() const -> ref_t
-{
-	return ref_t{self_->critical_.control_block.load()};
-}
-
-template <typename T>
-auto object<T>::write_t::garbage_collect() -> void
-{
-	static const auto can_be_deleted = [](const ref_t& instance)
-	{
-		return instance.is_unique() == 1;
-	};
-
-	garbage_.erase(std::remove_if(std::begin(garbage_), std::end(garbage_), can_be_deleted), std::end(garbage_));
-}
-
-template <typename T>
-template <typename UpdateFn>
-auto object<T>::write_t::update(UpdateFn&& fn) -> void
-{
-	const auto old_instance{instance_};
-	const auto cb{new cb_t{fn(*old_instance), 0}};
-
-	self_->critical_.control_block = cb;
-	instance_ = ref_t{cb};
-
-	garbage_.push_back(old_instance);
-	garbage_collect();
-}
-
-/////////////////////////////////////////////////////////////////////////
-/// ref /////////////////////////////////////////////////////////////////
-/////////////////////////////////////////////////////////////////////////
-
-template <typename T>
-ref<T>::ref(cb_t* cb)
-	: cb_{cb}
-{
-	assert (cb);
-
-	ref_add();
-}
-
-template <typename T>
-ref<T>::~ref()
-{
-	if (!cb_) return;
-
-	ref_sub();
-}
-
-template <typename T>
-ref<T>::ref(ref<T>&& rhs) noexcept
-{
-	if (cb_)
-	{
-		ref_sub();
-	}
-
-	cb_ = rhs.cb_;
-	rhs.cb_ = {};
-}
-
-template <typename T>
-ref<T>::ref(const ref<T>& rhs)
-	: cb_{rhs.cb_}
-{
-	if (!cb_) return;
-
-	assert (cb_->ref_count > 0);
-
-	ref_add();
-}
-
-template <typename T>
-auto ref<T>::operator=(ref<T>&& rhs) noexcept -> ref<T>&
-{
-	if (cb_)
-	{
-		ref_sub();
-	}
-
-	cb_ = rhs.cb_;
-	rhs.cb_ = {};
-
-	return *this;
-}
-
-template <typename T>
-auto ref<T>::operator=(const ref<T>& rhs) -> ref<T>&
-{
-	if (cb_)
-	{
-		ref_sub();
-	}
-
-	cb_ = rhs.cb_;
-
-	if (!cb_) return *this;
-
-	assert (cb_->ref_count > 0);
-
-	ref_add();
-
-	return *this;
-}
 
 class sync_signal
 {
