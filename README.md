@@ -51,7 +51,7 @@ ref->stuff();
     - `stupid::object::~object()`
     - `stupid::write::update()`
     
-# The `stupid::ref` destructor will also deallocate, but only if the associated `stupid::object` was already destructed.
+* The `stupid::ref` destructor will also deallocate, but only if the associated `stupid::object` was already destructed.
 
 ## Additional classes
 
