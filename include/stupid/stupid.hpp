@@ -1,500 +1,507 @@
 #pragma once
 
+#include <array>
 #include <atomic>
 #include <cassert>
-#include <functional>
-#include <mutex>
-#include <unordered_map>
+#include <vector>
 
 namespace stupid {
 
-template <class T> class Book;
-template <class T> class Object;
+template <typename T> class ref;
 
-template <class T>
-class Record
+namespace detail {
+
+template <typename T>
+struct control_block
+{
+	const T value;
+	std::atomic<uint32_t> ref_count{0};
+};
+
+} // detail
+
+template <typename T>
+class object
 {
 public:
 
-	Record(T* data, Book<T>* book)
-		: data_(data)
-		, book_(book)
-	{
-	}
+	using cb_t = detail::control_block<T>;
+	using me_t = object<T>;
+	using ref_t = ref<T>;
 
-	auto ref() -> void
-	{
-		ref_count_++;
-	}
+	object(const object&) = delete;
+	object(object&&) = delete;
+	auto operator=(const object&) -> object& = delete;
+	auto operator=(object&&) -> object& = delete;
 
-	auto unref() -> void
-	{
-		const auto value{ ref_count_.fetch_sub(1) };
-
-		if (value == 1)
-		{
-			book_->dispose(this);
-		}
-	}
-
-	auto is_dangling() const -> bool
-	{
-		return ref_count_ == 0;
-	}
-
-	auto get_data() const -> const T* { return data_; }
+	template <typename... Args>
+	object(Args... args) : critical_{args...} {}
 
 private:
 
-	T* data_{nullptr};
-	Book<T>* book_{nullptr};
-	std::atomic<int> ref_count_{0};
+	struct critical_t
+	{
+		template <typename... Args>
+		critical_t(Args... args) : control_block{new cb_t{T{args...}, 0}} {}
+
+		std::atomic<cb_t*> control_block;
+	} critical_;
+
+public:
+
+	struct read_t
+	{
+		read_t(me_t* self) : self_{self} {}
+
+		auto acquire() const -> ref_t
+		{
+			const auto cb{self_->critical_.control_block.load()};
+
+			assert (cb);
+
+			return ref_t{cb};
+		}
+
+		auto get_value() const -> const T&
+		{
+			const auto cb{self_->critical_.control_block.load()};
+
+			assert (cb);
+
+			return cb->value;
+		}
+
+	private:
+
+		me_t* self_;
+	} read{this};
+
+	struct write_t
+	{
+		write_t(me_t* self)
+			: self_{self}
+		{
+			instance_ = ref_t{self_->critical_.control_block.load()};
+		}
+
+		template <typename U>
+		auto set(U&& value) -> void
+		{
+			// The old control block won't be reclaimed before
+			// the end of this function, because we keep this
+			// reference to it. So it won't be garbage collected
+			// yet when we call garbage_collect() at the end of
+			// this function.
+			const auto old_instance{instance_};
+
+			// Create the new control block
+			const auto cb{new cb_t{std::forward<U>(value), 0}};
+
+			// Atomically set the new control block
+			self_->critical_.control_block = cb;
+
+			// Keep a reference to the new control block
+			instance_ = ref_t{cb};
+
+			// Push the old control block onto the garbage. It
+			// won't be collected yet.
+			garbage_.push_back(old_instance);
+
+			// Collect old control blocks that were already
+			// discarded.
+			garbage_collect();
+		}
+
+		template <typename UpdateFn>
+		auto update(UpdateFn&& fn) -> void
+		{
+			set(fn(*instance_));
+		}
+
+	private:
+
+		auto garbage_collect() -> void
+		{
+			static const auto can_be_deleted = [](const ref_t& instance)
+			{
+				assert (instance.cb_);
+				assert (instance.cb_ > 0);
+
+				return instance.cb_->ref_count == 1;
+			};
+
+			garbage_.erase(std::remove_if(std::begin(garbage_), std::end(garbage_), can_be_deleted), std::end(garbage_));
+		}
+
+		me_t* self_;
+		ref_t instance_;
+		std::vector<ref_t> garbage_;
+	} write{this};
 };
 
-template <class T>
-class Immutable
+template <typename T>
+class ref
 {
 public:
 
-	Immutable() = default;
+	using cb_t = detail::control_block<T>;
 
-	Immutable(Record<T>* record)
-		: record_(record)
+	ref() = default;
+
+	ref(cb_t* cb)
+		: cb_{cb}
 	{
-		if (record_) record_->ref();
+		assert (cb);
+
+		ref_add();
 	}
 
-	~Immutable()
+	ref(ref<T>&& rhs) noexcept
 	{
-		if (record_) record_->unref();
+		if (cb_)
+		{
+			ref_sub();
+		}
+
+		cb_ = rhs.cb_;
+		rhs.cb_ = {};
 	}
 
-	Immutable(Immutable<T> && rhs) noexcept
+	ref(const ref<T>& rhs)
+		: cb_{rhs.cb_}
 	{
-		if (record_) record_->unref();
-		
-		record_ = rhs.record_;
+		if (!cb_) return;
 
-		rhs.record_ = nullptr;
+		assert (cb_->ref_count > 0);
+
+		ref_add();
 	}
 
-	Immutable(const Immutable<T>& rhs)
+	~ref()
 	{
-		if (record_) record_->unref();
+		if (!cb_) return;
 
-		record_ = rhs.record_;
-
-		if (record_) record_->ref();
+		ref_sub();
 	}
 
-	auto operator=(const Immutable<T>& rhs) -> Immutable<T>&
+	auto operator=(ref<T>&& rhs) noexcept -> ref<T>&
 	{
-		if (record_) record_->unref();
+		if (cb_)
+		{
+			ref_sub();
+		}
 
-		record_ = rhs.record_;
-
-		if (record_) record_->ref();
+		cb_ = rhs.cb_;
+		rhs.cb_ = {};
 
 		return *this;
 	}
 
-	operator bool() const { return record_; }
-
-	auto get_data() const -> const T*
+	auto operator=(const ref<T>& rhs) -> ref<T>&
 	{
-		assert(record_);
+		if (cb_)
+		{
+			ref_sub();
+		}
 
-		return record_->get_data();
+		cb_ = rhs.cb_;
+
+		if (!cb_) return *this;
+
+		assert (cb_->ref_count > 0);
+
+		ref_add();
+
+		return *this;
 	}
 
-	auto operator->() const { return get_data(); }
-	auto& operator*() const { return *(get_data()); }
+	auto& get_value() const { return cb_->value; }
+	auto operator*() const -> const T& { return cb_->value; }
+	auto operator->() const -> const T* { return &cb_->value; }
 
 private:
 
-	Record<T>* record_{nullptr};
-};
-
-template <class T>
-class Book
-{
-public:
-
-	~Book()
+	auto ref_add() -> void
 	{
-		collect();
+		assert (cb_);
 
-		assert(dispose_flags_.empty() && "A stupid::Object is being destructed but there are still dangling references to it. Make sure all stupid::Immutable's for this object have been deleted before stupid::Object is destructed.");
+		cb_->ref_count++;
 	}
 
-	auto make_record(T* data) -> Record<T>*
+	auto ref_sub() -> void
 	{
-		const auto out{new Record<T>{data, this}};
+		assert (cb_);
 
-		dispose_flags_[out] = false;
-
-		return out;
-	}
-
-	auto dispose(Record<T>* record) -> void
-	{
-		const auto pos{dispose_flags_.find(record)};
-
-		if (pos != dispose_flags_.end())
+		if (cb_->ref_count.fetch_sub(1) == 1)
 		{
-			pos->second = true;
+			delete cb_;
 		}
 	}
 
-	auto collect() -> void
-	{
-		for (auto pos = dispose_flags_.begin(); pos != dispose_flags_.end();)
-		{
-			const auto record{pos->first};
-			const auto disposed {pos->second.load()};
+	cb_t* cb_{};
 
-			if (disposed && record->is_dangling())
-			{
-				delete record->get_data();
-				delete record;
-
-				pos = dispose_flags_.erase(pos);
-			}
-			else
-			{
-				pos++;
-			}
-		}
-	}
-
-private:
-
-	std::unordered_map<Record<T>*, std::atomic_bool> dispose_flags_;
+	friend class object<T>;
 };
 
-template <class T>
-class Read
-{
-	friend class Object<T>;
+/////////////////////////////////////////////////////////////////////////
+/// sync signal /////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////
 
-public:
-
-	auto get() const { return object_->get(); }
-
-private:
-
-	Read(Object<T>* object) : object_(object) {}
-
-	Object<T>* object_;
-};
-
-template <class T>
-class Write
-{
-	friend class Object<T>;
-
-public:
-
-	auto copy() const { return object_->copy(); }
-	auto commit(T* data) { return object_->commit(data); }
-
-	template <class ... Args>
-	auto commit_new(Args... args) { return object_->commit(new T(args...)); }
-
-	Immutable<T> get() { return object_->get(); }
-	auto get() const { return object_->get(); }
-
-private:
-
-	Write(Object<T>* object) : object_(object) {}
-
-	Object<T>* object_;
-};
-
-template <class T>
-class Object
-{
-	friend class Read<T>;
-	friend class Write<T>;
-
-public:
-
-	Object() : read_(this) , write_(this) {}
-
-	auto& read() const { return read_; }
-
-	auto& write() { return write_; }
-	auto& write() const { return write_; }
-
-	auto has_data() const -> bool { return last_written_record_; }
-
-private:
-
-	auto get() const
-	{
-		return Immutable<T>{last_written_record_};
-	}
-
-	auto copy() const -> T*
-	{
-		Immutable<T> ref{ get() };
-
-		if (!ref) return nullptr;
-
-		return new T(*(ref.get_data()));
-	}
-
-	auto commit(T* data) -> Immutable<T>
-	{
-#if _DEBUG
-		std::unique_lock<std::mutex> lock(debug_.commit_mutex, std::try_to_lock);
-
-		if (!lock.owns_lock())
-		{
-			throw std::runtime_error(
-				"stupid::Object::commit() is being called from multiple simultaneous "
-				"writer threads which is not supported. If you see this you have a "
-				"bug! This check won't be performed in a release build. This exception "
-				"won't be thrown in a release build.");
-		}
-#endif
-		const auto record{book_.make_record(data)};
-		const auto out{Immutable<T>{record}};
-
-		last_written_record_ = record;
-		last_written_ref_ = out;
-
-		book_.collect();
-
-		return out;
-	}
-
-	Book<T> book_;
-	Read<T> read_;
-	Write<T> write_;
-
-	std::atomic<Record<T>*> last_written_record_{nullptr};
-
-	// Keep at least one reference until overwritten
-	Immutable<T> last_written_ref_;
-
-#ifdef _DEBUG
-	struct
-	{
-		std::mutex commit_mutex;
-	} debug_;
-#endif
-};
-
-class SyncSignal
+class sync_signal
 {
 public:
 
 	auto get_value() const { return value_; }
-	auto operator()() -> void { value_++; }
+	auto notify() -> void { value_++; }
 
 private:
 
 	uint32_t value_{0};
 };
 
-template <class T, class SignalType = SyncSignal>
-class SignalSyncObject
-{
+/////////////////////////////////////////////////////////////////////////
+/// signal synced object ////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////
 
+template <class T, class SignalType = sync_signal>
+class signal_synced_object
+{
 public:
 
-	SignalSyncObject(const SignalType& signal)
-		: signal_(&signal)
-	{
-	}
-
-	auto& get_data()
-	{
-		update();
-
-		return *retrieved_;
-	}
-
-	auto copy() const
-	{
-		return object_.write().copy();
-	}
-
-	auto commit(T* data)
-	{
-		const auto out{object_.write().commit(data)};
-
-		new_data_ = true;
-
-		return out;
-	}
-
-	template <class ... Args>
-	auto commit_new(Args... args)
-	{
-		const auto out{object_.write().commit(new T(args...))};
-
-		new_data_ = true;
-
-		return out;
-	}
-
-	auto& read() const { return object_.read(); }
-	auto pending() const -> bool { return new_data_; }
+	using me_t = signal_synced_object<T, SignalType>;
+	using object_t = object<T>;
+	using ref_t = ref<T>;
 
 private:
 
-	auto update() -> void
+	struct critical_t
 	{
-		const auto signal_value = signal_->get_value();
+		template <typename... Args>
+		critical_t(Args... args) : object{args...} {}
 
-		if (signal_value > slot_value_)
+		object_t object;
+		std::atomic_bool value_pending{true};
+	} critical_;
+
+public:
+
+	template <typename... Args>
+	signal_synced_object(const SignalType& signal, Args... args)
+		: critical_{args...}
+		, read{this, signal}
+	{
+	}
+
+	struct read_t
+	{
+		read_t(me_t* self, const SignalType& signal) : self_{self}, signal_{&signal} {}
+
+		auto get_value() -> const T&
 		{
-			const auto new_data = new_data_.exchange(false);
+			update();
 
-			if (new_data)
+			return current_.get_value();
+		}
+
+		auto is_value_pending() const -> bool
+		{
+			return self_->critical_->value_pending.load();
+		}
+
+	private:
+
+		auto update() -> void
+		{
+			const auto signal_value{signal_->get_value()};
+
+			if (signal_value > slot_value_)
 			{
-				retrieved_ = object_.read().get();
+				get_new_value_if_pending();
+			}
+
+			slot_value_ = signal_value;
+		}
+
+		auto get_new_value_if_pending() -> void
+		{
+			const auto value_pending{self_->critical_.value_pending.exchange(false)};
+
+			if (value_pending)
+			{
+				current_ = self_->critical_.object.read.acquire();
 			}
 		}
 
-		slot_value_ = signal_value;
-	}
+		const SignalType* signal_;
+		uint32_t slot_value_{0};
+		ref_t current_;
+		me_t* self_;
+	} read;
 
-	Object<T> object_;
-	const SignalType* signal_;
-	std::uint32_t slot_value_{0};
-	Immutable<T> retrieved_;
-	std::atomic_bool new_data_{false};
+	struct write_t
+	{
+		write_t(me_t* self) : self_{self} {}
+
+		auto get_value() -> const T&
+		{
+			return self_->critical_.object.read.get_value();
+		}
+
+		template <typename U>
+		auto set(U&& value) -> void
+		{
+			self_->critical_.object.write.set(std::forward<U>(value));
+			self_->critical_.value_pending = true;
+		}
+
+		template <typename UpdateFn>
+		auto update(UpdateFn&& fn) -> void
+		{
+			self_->critical_.object.write.update(std::forward<UpdateFn>(fn));
+			self_->critical_.value_pending = true;
+		}
+
+	private:
+
+		me_t* self_;
+	} write{this};
 };
 
-template <class T, class SignalType = SyncSignal>
-class SignalSyncObjectPair
+/////////////////////////////////////////////////////////////////////////
+/// signal synced object pair ///////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////
+
+template <class T, class SignalType = sync_signal>
+class signal_synced_object_pair
 {
 public:
 
-	SignalSyncObjectPair(const SignalType& signal)
-		: signal_(&signal)
+	using me_t = signal_synced_object_pair<T, SignalType>;
+	using object_t = object<T>;
+	using ref_t = ref<T>;
+
+private:
+
+	struct critical_t
+	{
+		template <typename... Args>
+		critical_t(Args... args) : object{args...} {}
+
+		object_t object;
+		std::atomic_bool value_pending{true};
+	} critical_;
+
+public:
+
+	template <typename... Args>
+	signal_synced_object_pair(const SignalType& signal, Args... args)
+		: critical_{args...}
+		, read{this, signal}
 	{
 	}
 
-	// If there's data pending, store it in [0|1].
-	auto update(int8_t idx) -> void
+	struct read_t
 	{
-		assert(idx == 0 || idx == 1);
+		read_t(me_t* self, const SignalType& signal) : self_{self}, signal_{&signal} {}
 
-		const auto signal_value{signal_->get_value()};
-
-		if (signal_value > slot_value_)
+		// Get the value stored in the given cell.
+		// If there isn't one yet, fall back to the other cell.
+		// If there isn't a value in the other cell either,
+		// call update() to get the pending value (there should
+		// always be one waiting in this case.)
+		auto get_value(int8_t cell) -> const T&
 		{
-			const auto new_data{new_data_.exchange(false)};
+			assert(cell == 0 || cell == 1);
 
-			if (new_data)
+			if (have_value_[cell])
 			{
-				retrieved_[idx] = object_.read().get();
+				return current_[cell].get_value();
+			}
+
+			if (have_value_[1-cell])
+			{
+				return current_[1-cell].get_value();
+			}
+
+			update(cell);
+
+			assert(have_value_[cell]);
+
+			return current_[cell].get_value();
+		}
+
+		auto is_value_pending() const -> bool
+		{
+			return self_->critical_.value_pending.load();
+		}
+
+		// If there is a new value pending, store it in the
+		// given cell, but only if we were signalled
+		auto update(int8_t cell) -> void
+		{
+			assert(cell == 0 || cell == 1);
+
+			const auto signal_value{signal_->get_value()};
+
+			if (signal_value > slot_value_)
+			{
+				get_new_value_if_pending(cell);
+			}
+
+			slot_value_ = signal_value;
+		}
+
+	private:
+
+		// If there is a new value pending,
+		// store it in the given cell
+		auto get_new_value_if_pending(int8_t cell) -> void
+		{
+			assert(cell == 0 || cell == 1);
+
+			const auto value_pending{self_->critical_.value_pending.exchange(false)};
+
+			if (value_pending)
+			{
+				current_[cell] = self_->critical_.object.read.acquire();
+				have_value_[cell] = true;
 			}
 		}
 
-		slot_value_ = signal_value;
-	}
+		const SignalType* signal_;
+		uint32_t slot_value_{0};
+		std::array<ref_t, 2> current_;
+		std::array<bool, 2> have_value_;
+		me_t* self_;
+	} read;
 
-	// Get the current data for [0|1].
-	auto get_data(int8_t idx) -> const T&
+	struct write_t
 	{
-		assert(idx == 0 || idx == 1);
+		write_t(me_t* self) : self_{self} {}
 
-		if (retrieved_[idx]) return *retrieved_[idx];
-		if (retrieved_[flip(idx)]) return *retrieved_[flip(idx)];
+		template <typename U>
+		auto set(U&& value) -> void
+		{
+			self_->critical_.object.write.set(std::forward<U>(value));
+			self_->critical_.value_pending = true;
+		}
 
-		update(idx);
+		template <typename UpdateFn>
+		auto update(UpdateFn&& fn) -> void
+		{
+			self_->critical_.object.write.update(std::forward<UpdateFn>(fn));
+			self_->critical_.value_pending = true;
+		}
 
-		// Could trip if nothing has been committed yet.
-		assert(retrieved_[idx]);
+	private:
 
-		return *retrieved_[idx];
-	}
-
-	auto copy() const -> T*
-	{
-		return object_.write().copy();
-	}
-
-	auto commit(T* data)
-	{
-		const auto out{object_.write().commit(data)};
-
-		new_data_ = true;
-
-		return out;
-	}
-
-	template <class ... Args>
-	auto commit_new(Args... args)
-	{
-		const auto out{object_.write().commit(new T(args...))};
-
-		new_data_ = true;
-
-		return out;
-	}
-
-	auto& read() const { return object_.read(); }
-	auto pending() const -> bool { return new_data_; }
-
-private:
-
-	static auto flip(int8_t x) { return 1 - x; }
-
-	Object<T> object_;
-	const SignalType* signal_;
-	std::uint32_t slot_value_{0};
-	std::array<Immutable<T>, 2> retrieved_;
-	std::atomic_bool new_data_{false};
+		me_t* self_;
+	} write{this};
 };
 
-template <class T, class SignalType = SyncSignal>
-class QuickSync
+struct trigger
 {
-public:
-
-	QuickSync(const SignalType& signal)
-		: object_(signal)
-	{
-		object_.commit_new();
-	}
-
-	auto sync_copy(std::function<void(T*)> mutator) -> void
-	{
-		const auto copy{object_.copy()};
-
-		mutator(copy);
-
-		object_.commit(copy);
-	}
-
-	auto sync_new(std::function<void(T*)> mutator) -> void
-	{
-		const auto new_data{new T()};
-
-		mutator(new_data);
-
-		object_.commit(new_data);
-	}
-	
-	auto get_data() -> const T&
-	{
-		return object_.get_data();
-	}
-
-private:
-
-	SignalSyncObject<T, SignalType> object_;
-};
-
-struct AtomicTrigger
-{
-	AtomicTrigger(std::memory_order memory_order = std::memory_order_relaxed)
+	trigger(std::memory_order memory_order = std::memory_order_relaxed)
 		: memory_order_ { memory_order }
 	{
 		flag_.test_and_set(memory_order);
@@ -532,11 +539,11 @@ private:
 // throw_ball() performs a release store
 // catch_ball() performs an acquire load (if it succeeds)
 //
-class BeachBall
+class beach_ball
 {
 public:
 
-	BeachBall(int first_catcher)
+	beach_ball(int first_catcher)
 	{
 		assert(first_catcher == 0 || first_catcher == 1);
 
@@ -579,13 +586,13 @@ private:
 };
 
 template <int player>
-class BeachBallPlayer
+class beach_ball_player
 {
 public:
 
-	BeachBall* const ball;
+	beach_ball* const ball;
 
-	BeachBallPlayer(BeachBall* ball_)
+	beach_ball_player(beach_ball* ball_)
 		: ball{ ball_ }
 	{
 		static_assert(player == 0 || player == 1);

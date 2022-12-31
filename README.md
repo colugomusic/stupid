@@ -1,6 +1,8 @@
 # stupid
 Header-only lock-free synchronization utilities (one writer, many readers). No queues
 
+### i just re-wrote this library so the below documentation is all wrong :-)
+
 ## Base functionality
 
 The base functionality of this library is provided by the classes:
