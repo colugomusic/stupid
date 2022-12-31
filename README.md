@@ -1,48 +1,39 @@
 # stupid
 Header-only lock-free synchronization utilities (one writer, many readers). No queues
 
-### i just re-wrote this library so the below documentation is all wrong :-)
-
 ## Base functionality
 
 The base functionality of this library is provided by the classes:
-* `stupid::Object<T>`
-* `stupid::Immutable<T>`
+* `stupid::object<T>`
+* `stupid::ref<T>`
 
 ### Very basic usage example
 
 ```c++
-stupid::Object<Thing> thing;
+stupid::object<Thing> thing{constructor, args, ...};
 ```
 
 `In the writer thread`
 ```c++
-// Initialize the object
-thing.write().commit_new(...);
-
-// That's equivalent to doing this
-thing.write().commit(new Thing{...});
-
-// Create a copy of the object to modify
-auto copy = thing.write().copy();
-
-copy->modify();
-copy->the();
-copy->object();
-
-// Commit the modified object
-thing.write().commit(copy);
+thing.write.update([](Thing thing)
+{
+	thing->modify();
+	thing->the();
+	thing->object();
+	
+	return thing;
+});
 ```
 `In the reader thread`
 ```c++
 // Get a reference to the most recently committed version of the object
-stupid::Immutable<Thing> ref = thing.read().get();
+stupid::ref<Thing> ref = thing.read.acquire();
 
 ref->access();
 ref->read_only();
 ref->stuff();
 
-// stupid::Immutable is a reference counted type. The referenced version of
+// stupid::ref is a reference counted type. The referenced version of
 // the object will remain valid as long as there are references to it, even
 // if the writer thread commits new versions of the object.
 
@@ -50,42 +41,38 @@ ref->stuff();
 
 ### Caveats
 * Multiple simultaneous writer threads are not supported
-* All `stupid::Immutable`'s for a `stupid::Object` must be deleted before the `stupid::Object` is destructed
+* All `stupid::ref`'s for a `stupid::object` must be deleted before the `stupid::object` is destructed
 
 ### Notes
 * Only these methods allocate memory:
-    - `stupid::Write::commit_new()`
-    - `stupid::Write::copy()`
+    - `stupid::object::object(...)` (the constructor)
+    - `stupid::write_t::update()`
 
 * Only these methods deallocate memory (in the form of garbage collection of old versions of the object):
-    - `stupid::Object::~Object()`
-    - `stupid::Write::commit()`
-    - `stupid::Write::commit_new()`
- 
-* Memory is deallocated using `delete`
+    - `stupid::object::~object()`
+    - `stupid::write::update()`
 
 ## Additional classes
 
 Some additional, higher-level classes are provided for more specific use cases:
-* `stupid::SyncSignal`
-* `stupid::SignalSyncObject<T>`
-* `stupid::SignalSyncObjectPair<T>`
-* `stupid::QuickSync<T>`
+* `stupid::sync_signal`
+* `stupid::signal_synced_object<T>`
+* `stupid::signal_synced_object_pair<T>`
 
-### Possible `SignalSyncObject` usage in an audio application
+### Possible `signal_synced_object` usage in an audio application
 
 The audio callback in this example has the following stipulations:
  - May not allocate or deallocate memory
  - May not lock a mutex
- - Should be able to get a reference to some immutable data by calling some function e.g. `get_data()`
- - Repeated calls to `get_data()` within the same invocation of the audio callback must return the same reference
- - The reference returned from `get_data()` must remain valid for the duration of the current invocation of the audio callback
+ - Should be able to get a reference to some immutable value by calling some function e.g. `get_value()`
+ - Repeated calls to `get_value()` within the same invocation of the audio callback must return the same reference
+ - The reference returned from `get_value()` must remain valid for the duration of the current invocation of the audio callback
 
 ```c++
 struct
 {
-	stupid::SyncSignal signal;
-	stupid::SignalSyncObject<AudioData> data;
+	stupid::sync_signal signal;
+	stupid::signal_synced_object<AudioData> data;
 	
 	Sync() : data(signal) {}
 } sync;
@@ -95,39 +82,40 @@ struct
 ```c+++
 void update_audio_data()
 {
-	auto copy = sync.data.copy();
-
-	copy->modify();
-	copy->the();
-	copy->data();
-	
-	sync.data.commit(copy);
+	sync.data.write.update([](AudioData data)
+	{
+		data->modify();
+		data->the();
+		data->data();
+		
+		return data;
+	});
 }
 ```
 `Audio thread`
 ```c++
 void audio_callback(...)
 {
-	// stupid::SyncSignal::operator() is called once at the start
+	// stupid::sync_signal::notify() is called once at the start
 	// of each audio buffer, and nowhere else.
 
 	// This increments its value by 1.
 
 	// The signal's value is checked whenever
-	// stupid::SignalSyncObject::get_data() is called.
-	sync.signal();
+	// stupid::signal_synced_object::read_t::get_value() is called.
+	sync.signal.notify();
 
 	...
 
-	// stupid::SignalSyncObject::get_data() is guaranteed to always
+	// stupid::signal_synced_object::read_t::get_value() is guaranteed to always
 	// return a reference to the same data unless:
 	//  1. there is new data available, AND
 	//  2. the current signal value is greater than the previous
-	//     call to get_data().
+	//     call to get_value().
 
 	// Therefore new data (if there is any) is only retrieved on
-	// the first call to get_data() per audio buffer.
-	const AudioData& data1 = sync.data.get_data();
+	// the first call to get_value() per audio buffer.
+	const AudioData& data1 = sync.data.read.get_value();
 	
 	data1.use();
 	data1.the();
@@ -135,7 +123,7 @@ void audio_callback(...)
 
 	/**** UI thread could write new data here, for example ****/
 	
-	const auto& data2 = sync.data.get_data();
+	const auto& data2 = sync.data.read.get_value();
 	
 	// Will always pass. If new data was written by the UI thread
 	// then it won't be picked up until the next audio buffer.
@@ -144,18 +132,18 @@ void audio_callback(...)
 
 ```
 ## More Stuff
-### stupid::AtomicTrigger
+### stupid::trigger
 It's a tiny wrapper around `std::atomic_flag`.
 
-- `stupid::AtomicTrigger::operator()` primes the trigger
-- `stupid::AtomicTrigger::operator bool` returns true if the trigger was primed, and resets it
+- `stupid::trigger::operator()` primes the trigger
+- `stupid::trigger::operator bool` returns true if the trigger was primed, and resets it
 
 #### Example usage
 ```c++
 struct
 {
-	stupid::AtomicTrigger start_playback;
-	stupid::AtomicTrigger stop_playback;
+	stupid::trigger start_playback;
+	stupid::trigger stop_playback;
 } sync;
 ```
 `UI thread`
@@ -193,7 +181,7 @@ void audio_process()
 	}
 }
 ```
-### stupid::BeachBall and stupid::BeachBallPlayer
+### stupid::beach_ball and stupid::beach_ball_player
 Can be used to synchronize access to some memory between exactly two threads.
 
 Some documentation here: [beach_ball.md](beach_ball.md)
