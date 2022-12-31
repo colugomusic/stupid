@@ -26,7 +26,7 @@ thing.write.update([](Thing thing)
 ```
 `In the reader thread`
 ```c++
-// Get a reference to the most recently committed version of the object
+// Get a reference to the most recent version of the object
 stupid::ref<Thing> ref = thing.read.acquire();
 
 ref->access();
