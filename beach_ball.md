@@ -1,5 +1,5 @@
 # Beach Ball Synchronization
-There is a class [in the stupid header](include/stupid/stupid.hpp) named `stupid::BeachBall` which can be used to coordinate exclusive access to some memory between exactly two threads without any locks (with some hardware synchronization through aquire/release `std::atomic` memory ordering.)
+There is a class [in the stupid header](include/stupid/stupid.hpp) named `stupid::beach_ball` which can be used to coordinate exclusive access to some memory between exactly two threads without any locks (with some hardware synchronization through aquire/release `std::atomic` memory ordering.)
 
 This mechanism is intended for situations where both threads are running their own loop and will periodically work on some shared memory. Both threads want to take turns working on the memory, i.e. when a thread finishes working on the memory, it won't want to work on it again until the other thread has finished with it. If a thread wants to work on the memory it doesn't need to work on it right now this very instant - it is ok for it to just check if the other thread is still working on it and then go off and do something else and then check again later (instead of spinlocking).
 
@@ -20,7 +20,7 @@ static constexpr int PLAYER_A { 0 };
 static constexpr int PLAYER_B { 1 };
 static constexpr int WHO_STARTS_WITH_THE_BALL { PLAYER_A };
 
-stupid::BeachBall ball{ WHO_STARTS_WITH_THE_BALL };
+stupid::beach_ball ball{ WHO_STARTS_WITH_THE_BALL };
 SomeBufferType buffer;
 ```
 ```c++
@@ -67,15 +67,15 @@ auto player_B_process() -> void
   ball.throw_ball<PLAYER_B>();
 }
 ```
-There is a convenience class, `stupid::BeachBallPlayer` which can keep track of whether or not the player currently has the ball for you. So the above code can be re-written as:
+There is a convenience class, `stupid::beach_ball_player` which can keep track of whether or not the player currently has the ball for you. So the above code can be re-written as:
 ```c++
 static constexpr int PLAYER_A { 0 };
 static constexpr int PLAYER_B { 1 };
 static constexpr int WHO_STARTS_WITH_THE_BALL { PLAYER_A };
 
-stupid::BeachBall ball{ WHO_STARTS_WITH_THE_BALL };
-stupid::BeachBallPlayer<PLAYER_A> player_A{ &ball };
-stupid::BeachBallPlayer<PLAYER_B> player_B{ &ball };
+stupid::beach_ball ball{ WHO_STARTS_WITH_THE_BALL };
+stupid::beach_ball_player<PLAYER_A> player_A{ &ball };
+stupid::beach_ball_player<PLAYER_B> player_B{ &ball };
 SomeBufferType buffer;
 ```
 ```c++
