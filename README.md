@@ -80,7 +80,7 @@ struct
 ```
 
 `UI thread`
-```c+++
+```c++
 void update_audio_data()
 {
 	sync.data.write.update([](AudioData data)
