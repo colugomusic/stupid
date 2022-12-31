@@ -28,8 +28,25 @@ public:
 	using me_t = object<T>;
 	using ref_t = ref<T>;
 
+	object(const object&) = delete;
+	object(object&&) = delete;
+	auto operator=(const object&) -> object& = delete;
+	auto operator=(object&&) -> object& = delete;
+
 	template <typename... Args>
-	object(Args... args) : write{this, args...} {}
+	object(Args... args) : critical_{args...} {}
+
+private:
+
+	struct critical_t
+	{
+		template <typename... Args>
+		critical_t(Args... args) : control_block{new cb_t{T{args...}, 0}} {}
+
+		std::atomic<cb_t*> control_block;
+	} critical_;
+
+public:
 
 	struct read_t
 	{
@@ -37,7 +54,20 @@ public:
 
 		auto acquire() const -> ref_t
 		{
-			return ref_t{self_->critical_.control_block.load()};
+			const auto cb{self_->critical_.control_block.load()};
+
+			assert (cb);
+
+			return ref_t{cb};
+		}
+
+		auto get_value() const -> T
+		{
+			const auto cb{self_->critical_.control_block.load()};
+
+			assert (cb);
+
+			return cb->value;
 		}
 
 	private:
@@ -47,27 +77,44 @@ public:
 
 	struct write_t
 	{
-		template <typename... Args>
-		write_t(me_t* self, Args... args)
+		write_t(me_t* self)
 			: self_{self}
 		{
-			const auto cb{new cb_t{T{args...}, 0}};
+			instance_ = ref_t{self_->critical_.control_block.load()};
+		}
 
+		template <typename U>
+		auto set(U&& value) -> void
+		{
+			// The old control block won't be reclaimed before
+			// the end of this function, because we keep this
+			// reference to it. So it won't be garbage collected
+			// yet when we call garbage_collect() at the end of
+			// this function.
+			const auto old_instance{instance_};
+
+			// Create the new control block
+			const auto cb{new cb_t{std::forward<U>(value), 0}};
+
+			// Atomically set the new control block
 			self_->critical_.control_block = cb;
+
+			// Keep a reference to the new control block
 			instance_ = ref_t{cb};
+
+			// Push the old control block onto the garbage. It
+			// won't be collected yet.
+			garbage_.push_back(old_instance);
+
+			// Collect old control blocks that were already
+			// discarded.
+			garbage_collect();
 		}
 
 		template <typename UpdateFn>
 		auto update(UpdateFn&& fn) -> void
 		{
-			const auto old_instance{instance_};
-			const auto cb{new cb_t{fn(*old_instance), 0}};
-
-			self_->critical_.control_block = cb;
-			instance_ = ref_t{cb};
-
-			garbage_.push_back(old_instance);
-			garbage_collect();
+			set(fn(*instance_));
 		}
 
 	private:
@@ -76,7 +123,10 @@ public:
 		{
 			static const auto can_be_deleted = [](const ref_t& instance)
 			{
-				return instance.is_unique() == 1;
+				assert (instance.cb_);
+				assert (instance.cb_ > 0);
+
+				return instance.cb_->ref_count == 1;
 			};
 
 			garbage_.erase(std::remove_if(std::begin(garbage_), std::end(garbage_), can_be_deleted), std::end(garbage_));
@@ -85,14 +135,7 @@ public:
 		me_t* self_;
 		ref_t instance_;
 		std::vector<ref_t> garbage_;
-	} write;
-
-private:
-
-	struct critical_t
-	{
-		std::atomic<cb_t*> control_block;
-	} critical_;
+	} write{this};
 };
 
 template <typename T>
@@ -101,7 +144,6 @@ class ref
 public:
 
 	using cb_t = detail::control_block<T>;
-	using me_t = object<T>;
 
 	ref() = default;
 
@@ -172,8 +214,7 @@ public:
 		return *this;
 	}
 
-	auto get_value() const { return cb_->value; }
-	auto is_unique() const { return cb_->ref_count == 1; }
+	auto& get_value() const { return cb_->value; }
 	auto operator*() const -> const T& { return cb_->value; }
 	auto operator->() const -> const T* { return &cb_->value; }
 
@@ -197,6 +238,8 @@ private:
 	}
 
 	cb_t* cb_{};
+
+	friend class object<T>;
 };
 
 /////////////////////////////////////////////////////////////////////////
