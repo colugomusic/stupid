@@ -51,7 +51,7 @@ ref->stuff();
     - `stupid::object::~object()`
     - `stupid::write::update()`
     
-* The `stupid::ref` destructor will also deallocate, but only if the associated `stupid::object` was already destructed.
+* When a `stupid::object` is destroyed, if you are still holding on to any associated `stupid::ref`s then the last one to be destroyed will also deallocate in the destructor, so if you don't want your reader thread to deallocate then make sure you destroy all your `stupid::ref`s before destroying the associated `stupid::object`.
 
 ## Additional classes
 
