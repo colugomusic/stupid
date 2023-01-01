@@ -30,9 +30,10 @@ public:
 	using ref_t = ref<T>;
 
 	object(const object&) = delete;
-	object(object&&) = delete;
 	auto operator=(const object&) -> object& = delete;
-	auto operator=(object&&) -> object& = delete;
+
+	object(object&& rhs) noexcept = default;
+	auto operator=(object&& rhs) noexcept -> object& = default;
 
 	template <typename... Args>
 	object(Args... args) : critical_{args...} {}
@@ -44,6 +45,19 @@ private:
 		template <typename... Args>
 		critical_t(Args... args) : control_block{new cb_t{T{args...}, 0}} {}
 
+		critical_t(critical_t&& rhs) noexcept
+		{
+			this->operator=(std::move(rhs));
+		}
+
+		auto operator=(critical_t&& rhs) noexcept -> critical_t&
+		{
+			control_block.store(rhs.control_block.load());
+			rhs.control_block.store(nullptr);
+
+			return *this;
+		}
+
 		std::atomic<cb_t*> control_block;
 	} critical_;
 
@@ -52,6 +66,12 @@ public:
 	struct read_t
 	{
 		read_t(me_t* self) : self_{self} {}
+		read_t(read_t&& rhs) noexcept {}
+
+		auto operator=(read_t&& rhs) noexcept -> read_t&
+		{
+			return *this;
+		}
 
 		auto acquire() const -> ref_t
 		{
@@ -82,6 +102,19 @@ public:
 			: self_{self}
 		{
 			instance_ = ref_t{self_->critical_.control_block.load()};
+		}
+
+		write_t(write_t&& rhs) noexcept
+		{
+			this->operator=(std::move(rhs));
+		}
+
+		auto operator=(write_t&& rhs) noexcept -> write_t&
+		{
+			instance_ = std::move(rhs.instance_);
+			garbage_ = std::move(rhs.garbage_);
+
+			return *this;
 		}
 
 		template <typename U>
