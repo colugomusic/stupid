@@ -125,7 +125,7 @@ public:
 			static const auto can_be_deleted = [](const ref_t& instance)
 			{
 				assert (instance.cb_);
-				assert (instance.cb_ > 0);
+				assert (instance.cb_->ref_count > 0);
 
 				return instance.cb_->ref_count == 1;
 			};
