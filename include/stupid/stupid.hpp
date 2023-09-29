@@ -538,6 +538,7 @@ struct trigger
 	trigger(std::memory_order memory_order = std::memory_order_relaxed)
 		: memory_order_ { memory_order }
 	{
+		flag_.clear();
 		flag_.test_and_set(memory_order);
 	}
 
