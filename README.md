@@ -1,3 +1,4 @@
+## i hereby declare this stupid library as "deprecated" in favor of the less-stupid: https://github.com/colugomusic/ez
 # stupid
 Header-only lock-free synchronization utilities (one writer, many readers). No queues
 
